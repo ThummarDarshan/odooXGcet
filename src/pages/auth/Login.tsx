@@ -42,14 +42,19 @@ export default function Login() {
   const onSubmit = async (data: LoginForm) => {
     // SECURITY: Password is sent to auth context which handles API call
     // Password is never logged or stored in state after this point
-    const success = await login(data.email, data.password);
+    const user = await login(data.email, data.password);
 
-    if (success) {
+    if (user) {
       toast({
         title: 'Welcome back!',
         description: 'You have successfully logged in.',
       });
-      navigate(from, { replace: true });
+
+      if (user.role === 'customer') {
+        navigate('/portal/dashboard', { replace: true });
+      } else {
+        navigate(from, { replace: true });
+      }
     } else {
       toast({
         title: 'Login failed',
@@ -60,12 +65,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
+            <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
               <span className="text-xl font-bold text-primary-foreground">SF</span>
             </div>
             <div className="flex flex-col">
@@ -75,7 +80,7 @@ export default function Login() {
           </div>
         </div>
 
-        <Card>
+        <Card className="border-0 shadow-xl shadow-primary/10">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">Sign in</CardTitle>
             <CardDescription className="text-center">

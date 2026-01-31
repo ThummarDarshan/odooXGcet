@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { PRODUCT_CATEGORIES } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AnalyticalModels() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const { toast } = useToast();
   const all = analyticalRuleStore.getAll();
@@ -62,17 +63,20 @@ export default function AnalyticalModels() {
                 <TableHead>Product or Category</TableHead>
                 <TableHead>Cost Center</TableHead>
                 <TableHead>Enabled</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No rules found.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No rules found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map(r => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/account/analytical-models/${r.id}/edit`)}
+                  >
                     <TableCell>{r.priority}</TableCell>
                     <TableCell className="font-medium">{r.name}</TableCell>
                     <TableCell><Badge variant="secondary">{r.ruleType}</Badge></TableCell>
@@ -80,13 +84,8 @@ export default function AnalyticalModels() {
                       {r.ruleType === 'product' && r.productId ? getProductName(r.productId) : r.category ? getCategoryLabel(r.category) : '-'}
                     </TableCell>
                     <TableCell>{getCostCenterName(r.costCenterId)}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <Switch checked={r.enabled} onCheckedChange={checked => handleToggle(r.id, checked)} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/analytical-models/${r.id}/edit`}><Pencil className="h-4 w-4" /></Link>
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

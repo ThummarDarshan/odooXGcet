@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,9 +17,10 @@ import { productStore } from '@/services/mockData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
 
 export default function Products() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'archived'>('confirmed');
 
   const all = productStore.getAll();
   const filtered = all.filter(p => {
@@ -29,7 +30,10 @@ export default function Products() {
     return matchSearch && matchCat && matchStatus;
   });
 
-  const getCategoryLabel = (value: string) => PRODUCT_CATEGORIES.find(c => c.value === value)?.label ?? value;
+  const getCategoryLabel = (value: string) => {
+    const found = PRODUCT_CATEGORIES.find(c => c.value === value);
+    return found ? found.label : value;
+  };
 
   return (
     <div className="space-y-6">
@@ -72,11 +76,12 @@ export default function Products() {
             </select>
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'archived')}
+              onChange={e => setStatusFilter(e.target.value as any)}
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="all">All status</option>
-              <option value="active">Active</option>
+              <option value="draft">Draft</option>
+              <option value="confirmed">Confirmed</option>
               <option value="archived">Archived</option>
             </select>
           </div>
@@ -87,9 +92,9 @@ export default function Products() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Price (₹)</TableHead>
+                <TableHead>Sales Price</TableHead>
+                <TableHead>Purchase Price</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -101,19 +106,17 @@ export default function Products() {
                 </TableRow>
               ) : (
                 filtered.map(p => (
-                  <TableRow key={p.id}>
+                  <TableRow
+                    key={p.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/account/products/${p.id}/edit`)}
+                  >
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>{getCategoryLabel(p.category)}</TableCell>
-                    <TableCell>{p.price.toLocaleString()}</TableCell>
+                    <TableCell>Rs. {p.price.toLocaleString()}</TableCell>
+                    <TableCell>Rs. {p.purchasePrice.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={p.status === 'active' ? 'default' : 'outline'}>{p.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/products/${p.id}/edit`}>
-                          <Pencil className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <Badge variant={p.status === 'confirmed' ? 'default' : p.status === 'draft' ? 'secondary' : 'outline'}>{p.status}</Badge>
                     </TableCell>
                   </TableRow>
                 ))

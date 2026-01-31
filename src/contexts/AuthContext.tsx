@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { User, UserRole, AuthState } from '@/types';
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<User | null>;
   signup: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
   createUser: (email: string, password: string, name: string, role: UserRole) => Promise<boolean>;
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<User | null> => {
     // SECURITY: In production, send credentials to backend for validation
     // Backend handles password hashing/verification
     // Never log or store passwords in frontend
@@ -69,24 +69,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Mock validation - In production, this is handled by backend
     const mockUser = MOCK_USERS.find(u => u.email === email);
-    
+
     if (mockUser) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { passwordHash, ...userWithoutPassword } = mockUser;
-      
+
       sessionStorage.setItem('auth_user', JSON.stringify(userWithoutPassword));
-      
+
       setState({
         user: userWithoutPassword,
         isAuthenticated: true,
         isLoading: false,
       });
-      
-      return true;
+
+      return userWithoutPassword;
     }
 
     setState(prev => ({ ...prev, isLoading: false }));
-    return false;
+    return null;
   }, []);
 
   const signup = useCallback(async (email: string, password: string, name: string): Promise<boolean> => {
@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // In production, this would be a backend API call
     // Password is sent securely and hashed server-side
-    
+
     return true;
   }, [state.user]);
 

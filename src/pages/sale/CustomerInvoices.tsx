@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Pencil, Search } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { PAYMENT_STATUSES } from '@/lib/constants';
 const payMap = Object.fromEntries(PAYMENT_STATUSES.map(s => [s.value, s]));
 
 export default function CustomerInvoices() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [payFilter, setPayFilter] = useState<string>('all');
   const all = customerInvoiceStore.getAll();
@@ -25,7 +26,7 @@ export default function CustomerInvoices() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div><h1 className="text-2xl font-bold">Customer Invoices</h1><p className="text-muted-foreground">Invoices and payment status</p></div>
-        <Button asChild><Link to="/sale/invoices/create"><Plus className="h-4 w-4 mr-2" /> New Invoice</Link></Button>
+
       </div>
       <Card>
         <CardHeader>
@@ -51,25 +52,24 @@ export default function CustomerInvoices() {
                 <TableHead>Total</TableHead>
                 <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No invoices.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No invoices.</TableCell></TableRow>
               ) : (
                 filtered.map(inv => (
-                  <TableRow key={inv.id}>
+                  <TableRow
+                    key={inv.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/sale/invoices/${inv.id}`)}
+                  >
                     <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
                     <TableCell>{inv.customerName ?? inv.customerId}</TableCell>
                     <TableCell>{inv.invoiceDate}</TableCell>
                     <TableCell>Rs.{inv.total.toLocaleString()}</TableCell>
                     <TableCell>Rs.{inv.paidAmount.toLocaleString()}</TableCell>
                     <TableCell><Badge variant={payMap[inv.paymentStatus]?.color === 'destructive' ? 'destructive' : 'secondary'}>{inv.paymentStatus.replace('_', ' ')}</Badge></TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild><Link to={`/sale/invoices/${inv.id}`}><Pencil className="h-4 w-4" /></Link></Button>
-                      {inv.paymentStatus !== 'paid' && <Button size="sm" asChild><Link to={`/sale/payments/create?invoiceId=${inv.id}`}>Record Payment</Link></Button>}
-                    </TableCell>
                   </TableRow>
                 ))
               )}

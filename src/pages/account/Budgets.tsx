@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Pencil, Eye, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Pencil, Eye, Search, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,12 +16,18 @@ function getStatusBadge(status: string) {
 }
 
 export default function Budgets() {
+  const navigate = useNavigate();
+  const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const all = budgetStore.getAll();
+
   const filtered = all.filter(b => {
-    const nameMatch = !search || b.name.toLowerCase().includes(search.toLowerCase());
-    const ccMatch = !search || (b.costCenterName ?? '').toLowerCase().includes(search.toLowerCase());
-    return nameMatch || ccMatch;
+    const matchesSearch = !search || b.name.toLowerCase().includes(search.toLowerCase()) || (b.costCenterName ?? '').toLowerCase().includes(search.toLowerCase());
+
+    if (showAll) return matchesSearch;
+    // By default, hide Revised and Archived
+    return matchesSearch && b.stage !== 'revised' && b.stage !== 'archived';
   });
 
   return (
@@ -31,12 +37,24 @@ export default function Budgets() {
           <h1 className="text-2xl font-bold">Budgets</h1>
           <p className="text-muted-foreground">Manage budgets by cost center and period</p>
         </div>
-        <Button asChild>
-          <Link to="/account/budgets/create">
-            <Plus className="h-4 w-4 mr-2" />
-            New Budget
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant={showAll ? "secondary" : "outline"}
+            onClick={() => setShowAll(!showAll)}
+            title={showAll ? "Hide History" : "Show History (Revised/Archived)"}
+          >
+            {showAll ? "Hide History" : "Show History"}
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => setRefreshKey(k => k + 1)} title="Refresh">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button asChild>
+            <Link to="/account/budgets/create">
+              <Plus className="h-4 w-4 mr-2" />
+              New Budget
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -54,42 +72,56 @@ export default function Budgets() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Cost Center</TableHead>
+                <TableHead>Stage</TableHead>
+                <TableHead>Ver.</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Planned</TableHead>
                 <TableHead>Actual</TableHead>
                 <TableHead>Utilization</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>Performance</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No budgets found.</TableCell>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">No budgets found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map(b => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
+                  <TableRow
+                    key={b.id}
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${b.stage === 'archived' ? 'opacity-60 bg-muted/20' : (b.stage === 'revised' ? 'opacity-70 bg-muted/10' : '')
+                      }`}
+                    onClick={() => navigate(`/account/budgets/${b.id}/edit`)}
+                  >
+                    <TableCell className="font-medium text-foreground">{b.name}</TableCell>
                     <TableCell>{b.costCenterName ?? b.costCenterId}</TableCell>
-                    <TableCell>{b.periodStart} - {b.periodEnd}</TableCell>
-                    <TableCell>Rs.{b.plannedAmount.toLocaleString()}</TableCell>
-                    <TableCell>Rs.{b.actualAmount.toLocaleString()}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 w-24">
-                        <Progress value={Math.min(b.achievementPercentage, 100)} className="h-2" />
-                        <span className="text-xs">{b.achievementPercentage}%</span>
+                      <Badge variant="outline" className={`
+                            ${b.stage === 'draft' ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80' : ''}
+                            ${b.stage === 'confirmed' ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' : ''}
+                            ${b.stage === 'revised' ? 'bg-muted text-muted-foreground' : ''}
+                            ${b.stage === 'archived' ? 'bg-muted text-muted-foreground opacity-70' : ''}
+                        `}>
+                        {b.stage.charAt(0).toUpperCase() + b.stage.slice(1)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell><span className="text-muted-foreground text-xs font-mono bg-muted px-1.5 py-0.5 rounded">v{b.version}</span></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{b.periodStart} <span className="mx-1">→</span> {b.periodEnd}</TableCell>
+                    <TableCell className="font-mono text-sm">₹{b.plannedAmount.toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">₹{b.actualAmount.toLocaleString('en-IN')}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2 w-28">
+                        <Progress
+                          value={Math.min(b.achievementPercentage, 100)}
+                          className={`h-2 ${b.status === 'over_budget' ? '[&>*]:bg-destructive' : '[&>*]:bg-primary'}`}
+                        />
+                        <span className={`text-xs font-medium w-[3ch] text-right ${b.status === 'over_budget' ? 'text-destructive' : 'text-primary'}`}>
+                          {b.achievementPercentage}%
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(b.status)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/budgets/${b.id}`}><Eye className="h-4 w-4" /></Link>
-                      </Button>
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/budgets/${b.id}/edit`}><Pencil className="h-4 w-4" /></Link>
-                      </Button>
-                    </TableCell>
                   </TableRow>
                 ))
               )}

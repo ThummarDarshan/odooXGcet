@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Pencil, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { PAYMENT_STATUSES } from '@/lib/constants';
 const payMap = Object.fromEntries(PAYMENT_STATUSES.map(s => [s.value, s]));
 
 export default function VendorBills() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [payFilter, setPayFilter] = useState<string>('all');
   const all = vendorBillStore.getAll();
@@ -28,9 +29,7 @@ export default function VendorBills() {
           <h1 className="text-2xl font-bold">Vendor Bills</h1>
           <p className="text-muted-foreground">Bills from vendors</p>
         </div>
-        <Button asChild>
-          <Link to="/purchase/bills/create"><Plus className="h-4 w-4 mr-2" /> New Vendor Bill</Link>
-        </Button>
+
       </div>
       <Card>
         <CardHeader>
@@ -57,21 +56,28 @@ export default function VendorBills() {
                 <TableHead>Total</TableHead>
                 <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No bills.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No bills.</TableCell></TableRow>
               ) : (
                 filtered.map(vb => {
                   const po = vb.purchaseOrderId ? purchaseOrderStore.getById(vb.purchaseOrderId) : null;
                   return (
-                    <TableRow key={vb.id}>
+                    <TableRow
+                      key={vb.id}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(`/purchase/bills/${vb.id}/edit`)}
+                    >
                       <TableCell className="font-medium">{vb.billNumber}</TableCell>
                       <TableCell>
                         {po ? (
-                          <Link to={`/purchase/orders/${po.id}`} className="text-blue-600 hover:underline">
+                          <Link
+                            to={`/purchase/orders/${po.id}`}
+                            className="text-blue-600 hover:underline relative z-10"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {po.orderNumber}
                           </Link>
                         ) : (
@@ -83,10 +89,6 @@ export default function VendorBills() {
                       <TableCell>Rs.{vb.total.toLocaleString()}</TableCell>
                       <TableCell>Rs.{vb.paidAmount.toLocaleString()}</TableCell>
                       <TableCell><Badge variant={payMap[vb.paymentStatus]?.color === 'destructive' ? 'destructive' : 'secondary'}>{vb.paymentStatus.replace('_', ' ')}</Badge></TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" asChild><Link to={`/purchase/bills/${vb.id}/edit`}><Pencil className="h-4 w-4" /></Link></Button>
-                        {vb.paymentStatus !== 'paid' && <Button size="sm" asChild><Link to={`/purchase/payments/create?billId=${vb.id}`}>Pay</Link></Button>}
-                      </TableCell>
                     </TableRow>
                   );
                 })

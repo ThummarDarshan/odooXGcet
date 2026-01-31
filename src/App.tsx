@@ -10,7 +10,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // Auth Pages
 import Login from "@/pages/auth/Login";
 import Signup from "@/pages/auth/Signup";
-import CreateUser from "@/pages/auth/CreateUser";
 
 // Main Pages
 import Dashboard from "@/pages/dashboard/Dashboard";
@@ -80,12 +79,11 @@ const App = () => (
 
             {/* Protected Routes with Layout */}
             <Route element={
-              <AuthGuard>
+              <AuthGuard requiredRole="admin">
                 <AppLayout />
               </AuthGuard>
             }>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/account/users/create" element={<CreateUser />} />
               <Route path="/account/contacts" element={<Contacts />} />
               <Route path="/account/contacts/create" element={<ContactForm />} />
               <Route path="/account/contacts/:id/edit" element={<ContactForm />} />
@@ -97,25 +95,28 @@ const App = () => (
               <Route path="/account/cost-centers/:id/edit" element={<CostCenterForm />} />
               <Route path="/account/budgets" element={<Budgets />} />
               <Route path="/account/budgets/create" element={<BudgetForm />} />
-              <Route path="/account/budgets/:id" element={<BudgetDetail />} />
               <Route path="/account/budgets/:id/edit" element={<BudgetForm />} />
+              <Route path="/account/budgets/:id" element={<BudgetDetail />} />
               <Route path="/account/analytical-models" element={<AnalyticalModels />} />
               <Route path="/account/analytical-models/create" element={<AnalyticalModelForm />} />
               <Route path="/account/analytical-models/:id/edit" element={<AnalyticalModelForm />} />
               <Route path="/purchase/orders" element={<PurchaseOrders />} />
               <Route path="/purchase/orders/create" element={<PurchaseOrderForm />} />
               <Route path="/purchase/orders/:id/edit" element={<PurchaseOrderForm />} />
+              <Route path="/purchase/orders/:id" element={<PurchaseOrderForm />} />
               <Route path="/purchase/bills" element={<VendorBills />} />
               <Route path="/purchase/bills/create" element={<VendorBillForm />} />
               <Route path="/purchase/bills/:id/edit" element={<VendorBillForm />} />
+              <Route path="/purchase/bills/:id" element={<VendorBillForm />} />
               <Route path="/purchase/payments" element={<BillPayments />} />
               <Route path="/purchase/payments/create" element={<BillPaymentForm />} />
               <Route path="/sale/orders" element={<SalesOrders />} />
               <Route path="/sale/orders/create" element={<SalesOrderForm />} />
               <Route path="/sale/orders/:id/edit" element={<SalesOrderForm />} />
+              <Route path="/sale/orders/:id" element={<SalesOrderForm />} />
               <Route path="/sale/invoices" element={<CustomerInvoices />} />
               <Route path="/sale/invoices/create" element={<CustomerInvoiceForm />} />
-              <Route path="/sale/invoices/:id" element={<InvoiceDetail />} />
+              <Route path="/sale/invoices/:id" element={<CustomerInvoiceForm />} />
               <Route path="/sale/invoices/:id/edit" element={<CustomerInvoiceForm />} />
               <Route path="/sale/payments" element={<InvoicePayments />} />
               <Route path="/sale/payments/create" element={<InvoicePaymentForm />} />
@@ -137,7 +138,7 @@ const App = () => (
 
             {/* Redirects */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
+
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>

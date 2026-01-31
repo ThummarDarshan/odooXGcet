@@ -18,11 +18,11 @@ export default function BillPayments() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Bill Payments</h1>
           <p className="text-muted-foreground">Record payments against vendor bills</p>
         </div>
-        <Button asChild>
+        <Button asChild className="shrink-0 w-full sm:w-auto">
           <Link to="/purchase/payments/create"><Plus className="h-4 w-4 mr-2" /> Record Payment</Link>
         </Button>
       </div>

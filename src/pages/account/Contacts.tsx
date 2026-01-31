@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Pencil, Archive, Search } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Plus, Pencil, Archive, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Table,
   TableBody,
@@ -18,22 +20,54 @@ import type { Contact, ContactType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Contacts() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ContactType | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'archived'>('all');
+  const [selected, setSelected] = useState<string[]>([]);
   const { toast } = useToast();
+  // Use local state to track data for reactivity
+  const [data, setData] = useState<Contact[]>(contactStore.getAll());
 
-  const all = contactStore.getAll();
-  const filtered = all.filter(c => {
+  // Refresh data helper
+  const refreshData = () => {
+    setData([...contactStore.getAll()]);
+    setSelected([]); // Clear selection on refresh
+  };
+
+  const filtered = data.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase());
     const matchType = typeFilter === 'all' || c.type === typeFilter;
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchSearch && matchType && matchStatus;
   });
 
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelected(filtered.map(c => c.id));
+    } else {
+      setSelected([]);
+    }
+  };
+
+  const toggleSelect = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelected(prev => [...prev, id]);
+    } else {
+      setSelected(prev => prev.filter(i => i !== id));
+    }
+  };
+
   const handleArchive = (id: string, name: string) => {
     contactStore.archive(id);
     toast({ title: 'Archived', description: `${name} has been archived.` });
+    refreshData();
+  };
+
+  const handleBulkArchive = () => {
+    selected.forEach(id => contactStore.archive(id));
+    toast({ title: 'Bulk Archived', description: `${selected.length} contacts archived.` });
+    refreshData();
   };
 
   return (
@@ -43,12 +77,20 @@ export default function Contacts() {
           <h1 className="text-2xl font-bold">Contacts</h1>
           <p className="text-muted-foreground">Manage customers and vendors</p>
         </div>
-        <Button asChild>
-          <Link to="/account/contacts/create">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Contact
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          {selected.length > 0 && (
+            <Button variant="destructive" onClick={handleBulkArchive}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Archive ({selected.length})
+            </Button>
+          )}
+          <Button asChild>
+            <Link to="/account/contacts/create">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Contact
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -76,11 +118,12 @@ export default function Contacts() {
             </select>
             <select
               value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'archived')}
+              onChange={e => setStatusFilter(e.target.value as any)}
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="all">All status</option>
-              <option value="active">Active</option>
+              <option value="draft">Draft</option>
+              <option value="confirmed">Confirmed</option>
               <option value="archived">Archived</option>
             </select>
           </div>
@@ -89,51 +132,56 @@ export default function Contacts() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={filtered.length > 0 && selected.length === filtered.length}
+                    onCheckedChange={(c) => toggleSelectAll(!!c)}
+                  />
+                </TableHead>
+                <TableHead className="w-16">Image</TableHead>
+                <TableHead>Contact Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Portal</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     No contacts found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map(c => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableRow
+                    key={c.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/account/contacts/${c.id}/edit`)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selected.includes(c.id)}
+                        onCheckedChange={(chk) => toggleSelect(c.id, !!chk)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={c.image} alt={c.name} />
+                        <AvatarFallback>{c.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <span className="hover:underline">
+                        {c.name}
+                      </span>
+                    </TableCell>
                     <TableCell>{c.email}</TableCell>
                     <TableCell>{c.phone}</TableCell>
                     <TableCell>
-                      <Badge variant={c.type === 'customer' ? 'default' : 'secondary'}>{c.type}</Badge>
-                    </TableCell>
-                    <TableCell>{c.portalAccess ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>
-                      <Badge variant={c.status === 'active' ? 'default' : 'outline'}>{c.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/contacts/${c.id}/edit`}>
-                          <Pencil className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      {c.status === 'active' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleArchive(c.id, c.name)}
-                          className="text-muted-foreground"
-                        >
-                          <Archive className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Badge variant={c.status === 'confirmed' ? 'default' : c.status === 'draft' ? 'secondary' : 'outline'}>
+                        {c.status}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))

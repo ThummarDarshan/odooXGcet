@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
-import { Breadcrumbs } from './Breadcrumbs';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { Bell, LogOut, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export function AppLayout() {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           {/* Header */}
-          <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b bg-card px-4 lg:px-6">
+          <header className="sticky top-0 z-50 flex h-14 items-center gap-4 border-b border-border/80 bg-card/95 backdrop-blur-sm px-4 lg:px-6 shadow-sm">
             <SidebarTrigger />
 
             {/* Spacer */}
@@ -92,8 +92,7 @@ export function AppLayout() {
             </div>
           </header>
 
-          {/* Breadcrumbs */}
-          <Breadcrumbs />
+
 
           {/* Main Content */}
           <main className="flex-1 p-4 lg:p-6">

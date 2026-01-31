@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { ORDER_STATUSES } from '@/lib/constants';
 const statusMap = Object.fromEntries(ORDER_STATUSES.map(s => [s.value, s]));
 
 export default function PurchaseOrders() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const all = purchaseOrderStore.getAll();
@@ -60,17 +61,20 @@ export default function PurchaseOrders() {
                 <TableHead>Date</TableHead>
                 <TableHead>Total (Rs.)</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No purchase orders found.</TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No purchase orders found.</TableCell>
                 </TableRow>
               ) : (
                 filtered.map(po => (
-                  <TableRow key={po.id}>
+                  <TableRow
+                    key={po.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/purchase/orders/${po.id}/edit`)}
+                  >
                     <TableCell className="font-medium">{po.orderNumber}</TableCell>
                     <TableCell>{po.vendorName ?? po.vendorId}</TableCell>
                     <TableCell>{po.orderDate}</TableCell>
@@ -79,11 +83,6 @@ export default function PurchaseOrders() {
                       <Badge variant={statusMap[po.status]?.color === 'destructive' ? 'destructive' : statusMap[po.status]?.color === 'success' ? 'default' : 'secondary'}>
                         {po.status}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/purchase/orders/${po.id}/edit`}><Pencil className="h-4 w-4" /></Link>
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

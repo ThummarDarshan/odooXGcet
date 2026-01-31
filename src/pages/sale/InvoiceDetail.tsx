@@ -66,7 +66,7 @@ export default function InvoiceDetail() {
               {invoice.lineItems.map(li => (
                 <TableRow key={li.id}>
                   <TableCell>{li.productName ?? li.productId}</TableCell>
-                  <TableCell>{li.quantity}</TableCell>
+                  <TableCell>{Math.floor(li.quantity)}</TableCell>
                   <TableCell>Rs.{li.unitPrice.toLocaleString()}</TableCell>
                   <TableCell>Rs.{li.amount.toLocaleString()}</TableCell>
                 </TableRow>

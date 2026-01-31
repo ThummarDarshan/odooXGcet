@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import {
 import { costCenterStore } from '@/services/mockData';
 
 export default function CostCenters() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const all = costCenterStore.getAll();
   const filtered = all.filter(cc =>
@@ -58,30 +59,26 @@ export default function CostCenters() {
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                     No cost centers found.
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map(cc => (
-                  <TableRow key={cc.id}>
+                  <TableRow
+                    key={cc.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/account/cost-centers/${cc.id}/edit`)}
+                  >
                     <TableCell className="font-medium">{cc.name}</TableCell>
                     <TableCell>{cc.description}</TableCell>
                     <TableCell>
                       <Badge variant={cc.status === 'active' ? 'default' : 'outline'}>{cc.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/account/cost-centers/${cc.id}/edit`}>
-                          <Pencil className="h-4 w-4" />
-                        </Link>
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

@@ -23,19 +23,28 @@ export type ContactType = 'customer' | 'vendor';
 export interface Contact {
   id: string;
   name: string;
+  image?: string;
   email: string;
   phone: string;
-  address: string;
+  // Address
+  street?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+
+  tags?: string[];
   type: ContactType;
   portalAccess: boolean;
-  status: 'active' | 'archived';
+  portalPassword?: string; // Added password for portal access
+  status: 'draft' | 'confirmed' | 'archived'; // Updated status
   createdAt: string;
   updatedAt: string;
 }
 
 // ==================== PRODUCT TYPES ====================
 
-export type ProductCategory = 
+export type ProductCategory =
   | 'sofa'
   | 'bed'
   | 'table'
@@ -49,9 +58,10 @@ export type ProductCategory =
 export interface Product {
   id: string;
   name: string;
-  category: ProductCategory;
-  price: number;
-  status: 'active' | 'archived';
+  category: string; // Changed from enum to string to support "create on fly"
+  price: number; // Sales Price
+  purchasePrice: number; // Purchase Price
+  status: 'draft' | 'confirmed' | 'archived';
   createdAt: string;
   updatedAt: string;
 }
@@ -81,6 +91,13 @@ export interface Budget {
   actualAmount: number;
   remainingBalance: number;
   achievementPercentage: number;
+  // Lifecycle
+  stage: 'draft' | 'confirmed' | 'revised' | 'archived';
+  version: number;
+  revisionOfId?: string; // ID of the previous version
+  nextVersionId?: string; // ID of the next version (if revised)
+
+  // Performance Status (Calculated)
   status: BudgetStatus;
   createdAt: string;
   updatedAt: string;
@@ -120,6 +137,7 @@ export interface LineItem {
   id: string;
   productId: string;
   productName?: string;
+  /** Quantity - integer only */
   quantity: number;
   unitPrice: number;
   amount: number;
@@ -134,6 +152,7 @@ export interface PurchaseOrder {
   orderNumber: string;
   vendorId: string;
   vendorName?: string;
+  reference?: string;
   orderDate: string;
   status: OrderStatus;
   lineItems: LineItem[];
@@ -151,6 +170,7 @@ export interface VendorBill {
   purchaseOrderId?: string;
   vendorId: string;
   vendorName?: string;
+  billReference?: string;
   billDate: string;
   dueDate: string;
   status: OrderStatus;
@@ -183,6 +203,7 @@ export interface SalesOrder {
   orderNumber: string;
   customerId: string;
   customerName?: string;
+  reference?: string;
   orderDate: string;
   status: OrderStatus;
   lineItems: LineItem[];

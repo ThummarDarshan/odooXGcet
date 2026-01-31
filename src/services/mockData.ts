@@ -23,37 +23,48 @@ import { DEFAULT_TAX_RATE } from '@/lib/constants';
 let contacts: Contact[] = [
   {
     id: 'c1',
-    name: 'ABC Furniture Mart',
-    email: 'abc@furniture.com',
+    name: 'Sharma Furniture Mart',
+    email: 'sharma@furniture.com',
     phone: '+91 9876543210',
-    address: '123 MG Road, Bangalore',
+    street: '123 MG Road',
+    city: 'Bangalore',
+    state: 'Karnataka',
+    country: 'India',
     type: 'vendor',
     portalAccess: false,
-    status: 'active',
+    status: 'confirmed',
+    tags: ['Furniture', 'Vendor'],
     createdAt: '2024-01-10',
     updatedAt: '2024-01-10',
   },
   {
     id: 'c2',
-    name: 'John Customer',
-    email: 'customer@example.com',
+    name: 'Rahul Patel',
+    email: 'rahul.patel@example.com',
     phone: '+91 9123456789',
-    address: '456 Park Street, Mumbai',
+    street: '456 Park Street',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    country: 'India',
     type: 'customer',
     portalAccess: true,
-    status: 'active',
+    status: 'confirmed',
+    tags: ['VIP'],
     createdAt: '2024-01-15',
     updatedAt: '2024-01-15',
   },
   {
     id: 'c3',
-    name: 'XYZ Wood Suppliers',
-    email: 'xyz@wood.com',
+    name: 'Verma Wood Suppliers',
+    email: 'verma@wood.com',
     phone: '+91 9988776655',
-    address: '789 Industrial Area, Chennai',
+    street: '789 Industrial Area',
+    city: 'Chennai',
+    state: 'Tamil Nadu',
+    country: 'India',
     type: 'vendor',
     portalAccess: false,
-    status: 'active',
+    status: 'confirmed',
     createdAt: '2024-02-01',
     updatedAt: '2024-02-01',
   },
@@ -62,12 +73,12 @@ let contacts: Contact[] = [
 export const contactStore = {
   getAll: (): Contact[] => [...contacts],
   getById: (id: string): Contact | undefined => contacts.find(c => c.id === id),
-  getByType: (type: 'customer' | 'vendor'): Contact[] => contacts.filter(c => c.type === type && c.status === 'active'),
+  getByType: (type: 'customer' | 'vendor'): Contact[] => contacts.filter(c => c.type === type && c.status === 'confirmed'),
   create: (data: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>): Contact => {
     const now = new Date().toISOString().slice(0, 10);
     const contact: Contact = {
       ...data,
-      status: data.status || 'active', // Ensure status defaults to 'active'
+      status: data.status || 'draft',
       id: 'c' + Date.now(),
       createdAt: now,
       updatedAt: now,
@@ -113,20 +124,26 @@ export const costCenterStore = {
 
 // ==================== PRODUCTS ====================
 let products: Product[] = [
-  { id: 'p1', name: 'Classic Sofa Set', category: 'sofa', price: 45000, status: 'active', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
-  { id: 'p2', name: 'King Size Bed', category: 'bed', price: 35000, status: 'active', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
-  { id: 'p3', name: 'Dining Table 6 Seater', category: 'table', price: 28000, status: 'active', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
-  { id: 'p4', name: 'Office Chair', category: 'chair', price: 8500, status: 'active', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
-  { id: 'p5', name: 'Sliding Wardrobe', category: 'wardrobe', price: 52000, status: 'active', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
+  { id: 'p1', name: 'Classic Sofa Set', category: 'sofa', price: 45000, purchasePrice: 30000, status: 'confirmed', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
+  { id: 'p2', name: 'King Size Bed', category: 'bed', price: 35000, purchasePrice: 22000, status: 'confirmed', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
+  { id: 'p3', name: 'Dining Table 6 Seater', category: 'table', price: 28000, purchasePrice: 18000, status: 'confirmed', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
+  { id: 'p4', name: 'Office Chair', category: 'chair', price: 8500, purchasePrice: 5000, status: 'confirmed', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
+  { id: 'p5', name: 'Sliding Wardrobe', category: 'wardrobe', price: 52000, purchasePrice: 35000, status: 'confirmed', createdAt: '2024-01-05', updatedAt: '2024-01-05' },
 ];
 
 export const productStore = {
   getAll: (): Product[] => [...products],
-  getActive: (): Product[] => products.filter(p => p.status === 'active'),
+  getActive: (): Product[] => products.filter(p => p.status === 'confirmed'), // Active map to confirmed
   getById: (id: string): Product | undefined => products.find(p => p.id === id),
   create: (data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Product => {
     const now = new Date().toISOString().slice(0, 10);
-    const product: Product = { ...data, id: 'p' + Date.now(), createdAt: now, updatedAt: now };
+    const product: Product = {
+      ...data,
+      id: 'p' + Date.now(),
+      status: data.status || 'draft',
+      createdAt: now,
+      updatedAt: now
+    };
     products = [...products, product];
     return product;
   },
@@ -137,13 +154,21 @@ export const productStore = {
     products = [...products.slice(0, idx), { ...products[idx], ...data, updatedAt: now }, ...products.slice(idx + 1)];
     return products[idx];
   },
+  archive: (id: string) => productStore.update(id, { status: 'archived' }),
 };
 
 // ==================== BUDGETS ====================
 let budgets: Budget[] = [
-  { id: 'b1', name: 'Q1 Manufacturing', costCenterId: 'cc1', periodStart: '2024-01-01', periodEnd: '2024-03-31', plannedAmount: 50000, actualAmount: 42000, remainingBalance: 8000, achievementPercentage: 84, status: 'under_budget', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-  { id: 'b2', name: 'Q1 Marketing', costCenterId: 'cc2', periodStart: '2024-01-01', periodEnd: '2024-03-31', plannedAmount: 25000, actualAmount: 28000, remainingBalance: -3000, achievementPercentage: 112, status: 'over_budget', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
-  { id: 'b3', name: 'Q1 Operations', costCenterId: 'cc3', periodStart: '2024-01-01', periodEnd: '2024-03-31', plannedAmount: 30000, actualAmount: 26000, remainingBalance: 4000, achievementPercentage: 87, status: 'under_budget', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  {
+    id: 'b1', name: 'Q1 Manufacturing', costCenterId: 'cc1', periodStart: '2025-01-01', periodEnd: '2025-12-31', plannedAmount: 50000, actualAmount: 42000, remainingBalance: 8000, achievementPercentage: 84, status: 'under_budget', stage: 'confirmed', version: 1, createdAt: '2024-01-01', updatedAt: '2024-01-15'
+  },
+  {
+    id: 'b2', name: 'Marketing Q1 2024', costCenterId: 'cc2', costCenterName: 'Marketing',
+    periodStart: '2024-01-01', periodEnd: '2024-03-31', plannedAmount: 200000, actualAmount: 210000,
+    remainingBalance: -10000, achievementPercentage: 105, status: 'over_budget',
+    stage: 'confirmed', version: 1, createdAt: '2024-01-01', updatedAt: '2024-02-20'
+  },
+  { id: 'b3', name: 'Q1 Operations', costCenterId: 'cc3', periodStart: '2025-01-01', periodEnd: '2025-12-31', plannedAmount: 30000, actualAmount: 26000, remainingBalance: 4000, achievementPercentage: 87, status: 'under_budget', stage: 'confirmed', version: 1, createdAt: '2025-01-01', updatedAt: '2025-01-01' },
 ];
 
 let budgetRevisions: BudgetRevision[] = [];
@@ -153,6 +178,7 @@ export const budgetStore = {
     const cc = costCenters.find(c => c.id === b.costCenterId);
     return { ...b, costCenterName: cc?.name };
   }),
+  getActive: (): Budget[] => budgets.filter(b => b.stage === 'confirmed'),
   getById: (id: string): Budget | undefined => {
     const b = budgets.find(x => x.id === id);
     if (!b) return undefined;
@@ -160,7 +186,9 @@ export const budgetStore = {
     return { ...b, costCenterName: cc?.name };
   },
   getRevisions: (budgetId: string): BudgetRevision[] => budgetRevisions.filter(r => r.budgetId === budgetId),
-  create: (data: Omit<Budget, 'id' | 'actualAmount' | 'remainingBalance' | 'achievementPercentage' | 'status' | 'createdAt' | 'updatedAt'>): Budget => {
+
+  create: (data: Omit<Budget, 'id' | 'actualAmount' | 'remainingBalance' | 'achievementPercentage' | 'status' | 'stage' | 'version' | 'createdAt' | 'updatedAt'>): Budget => {
+    const now = new Date().toISOString().slice(0, 10);
     const b: Budget = {
       ...data,
       id: 'b' + Date.now(),
@@ -168,49 +196,112 @@ export const budgetStore = {
       remainingBalance: data.plannedAmount,
       achievementPercentage: 0,
       status: 'under_budget',
-      createdAt: new Date().toISOString().slice(0, 10),
-      updatedAt: new Date().toISOString().slice(0, 10),
+      stage: 'draft',
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
     };
     budgets = [...budgets, b];
     return budgetStore.getById(b.id)!;
   },
-  update: (id: string, data: Partial<Pick<Budget, 'plannedAmount' | 'name' | 'periodStart' | 'periodEnd'>>): Budget | undefined => {
+
+  update: (id: string, data: Partial<Budget>): Budget | undefined => {
     const idx = budgets.findIndex(b => b.id === id);
     if (idx === -1) return undefined;
     const prev = budgets[idx];
-    if (data.plannedAmount !== undefined && data.plannedAmount !== prev.plannedAmount) {
-      budgetRevisions = [...budgetRevisions, {
-        id: 'rev' + Date.now(),
-        budgetId: id,
-        previousAmount: prev.plannedAmount,
-        newAmount: data.plannedAmount,
-        reason: 'Revision',
-        revisedBy: 'Admin',
-        revisedAt: new Date().toISOString(),
-      }];
-    }
     const updated: Budget = {
       ...prev,
       ...data,
-      remainingBalance: (data.plannedAmount ?? prev.plannedAmount) - prev.actualAmount,
-      achievementPercentage: Math.round((prev.actualAmount / (data.plannedAmount ?? prev.plannedAmount)) * 100),
-      status: prev.actualAmount <= (data.plannedAmount ?? prev.plannedAmount) ? (prev.actualAmount >= (data.plannedAmount ?? prev.plannedAmount) * 0.8 ? 'near_limit' : 'under_budget') : 'over_budget',
       updatedAt: new Date().toISOString().slice(0, 10),
     };
+
+    // Recalculate derived if plannedAmount changed
+    if (data.plannedAmount !== undefined || (data.actualAmount !== undefined)) {
+      const planned = data.plannedAmount ?? prev.plannedAmount;
+      const actual = data.actualAmount ?? prev.actualAmount;
+      updated.remainingBalance = planned - actual;
+      updated.achievementPercentage = planned > 0 ? Math.round((actual / planned) * 100) : 0;
+      updated.status = updated.achievementPercentage > 100 ? 'over_budget' : (updated.achievementPercentage > 90 ? 'near_limit' : 'under_budget');
+    }
+
     budgets = [...budgets.slice(0, idx), updated, ...budgets.slice(idx + 1)];
     return budgetStore.getById(id);
+  },
+
+  confirm: (id: string) => {
+    return budgetStore.update(id, { stage: 'confirmed' });
+  },
+
+  archive: (id: string) => {
+    return budgetStore.update(id, { stage: 'archived' });
+  },
+
+  revise: (id: string): Budget | undefined => {
+    const current = budgets.find(b => b.id === id);
+    if (!current || current.stage !== 'confirmed') return undefined;
+
+    const now = new Date().toISOString().slice(0, 10);
+
+    const newVersion: Budget = {
+      ...current,
+      id: 'b' + Date.now(),
+      version: current.version + 1,
+      revisionOfId: current.id,
+      nextVersionId: undefined,
+      stage: 'draft',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    budgetStore.update(current.id, {
+      stage: 'revised',
+      nextVersionId: newVersion.id
+    });
+
+    budgets = [...budgets, newVersion];
+    return newVersion;
   },
   addActual: (costCenterId: string, amount: number): void => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     budgets = budgets.map(b => {
-      if (b.costCenterId !== costCenterId || today < b.periodStart || today > b.periodEnd) return b;
+      // Only update if cost center matches and budget is active (period check relaxed)
+      if (b.costCenterId !== costCenterId) return b;
+
+      // Check if budget period is valid or if it's a year-long budget
+      const budgetStart = new Date(b.periodStart);
+      const budgetEnd = new Date(b.periodEnd);
+      const currentDate = new Date(today);
+
+      // Update if current date is within budget period OR if it's a current year budget
+      const isWithinPeriod = currentDate >= budgetStart && currentDate <= budgetEnd;
+      const isCurrentYear = budgetStart.getFullYear() === currentDate.getFullYear();
+
+      if (!isWithinPeriod && !isCurrentYear) return b;
+
       const newActual = b.actualAmount + amount;
       const remaining = b.plannedAmount - newActual;
       const pct = Math.round((newActual / b.plannedAmount) * 100);
       const status: Budget['status'] = newActual > b.plannedAmount ? 'over_budget' : pct >= 80 ? 'near_limit' : 'under_budget';
       return { ...b, actualAmount: newActual, remainingBalance: remaining, achievementPercentage: pct, status, updatedAt: today };
     });
+  },
+  checkBudget: (costCenterId: string, amount: number): { isExceeded: boolean; budgetName: string; remaining: number } | null => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const b = budgets.find(b => {
+      if (b.costCenterId !== costCenterId) return false;
+      const budgetStart = new Date(b.periodStart);
+      const budgetEnd = new Date(b.periodEnd);
+      const currentDate = new Date(today);
+      const isWithinPeriod = currentDate >= budgetStart && currentDate <= budgetEnd;
+      const isCurrentYear = budgetStart.getFullYear() === currentDate.getFullYear();
+      return isWithinPeriod || isCurrentYear;
+    });
+
+    if (!b) return null;
+    const isExceeded = amount > b.remainingBalance;
+    return { isExceeded, budgetName: b.name, remaining: b.remainingBalance };
   },
 };
 
@@ -247,7 +338,8 @@ let purchaseOrders: PurchaseOrder[] = [
     id: 'po1',
     orderNumber: 'PO-2024-001',
     vendorId: 'c1',
-    vendorName: 'ABC Furniture Mart',
+    vendorName: 'Sharma Furniture Mart',
+    reference: 'REF-001',
     orderDate: '2024-01-15',
     status: 'posted',
     lineItems: [
@@ -273,11 +365,12 @@ export const purchaseOrderStore = {
     const orderNumber = `PO-2024-${String(num).padStart(3, '0')}`;
     const po: PurchaseOrder = { ...data, id: 'po' + Date.now(), orderNumber, createdAt: new Date().toISOString().slice(0, 10), updatedAt: new Date().toISOString().slice(0, 10) };
     purchaseOrders = [...purchaseOrders, po];
-    
+
     // Automatically create vendor bill when PO is created
     const billData = {
       purchaseOrderId: po.id,
       vendorId: po.vendorId,
+      billReference: po.reference,
       billDate: new Date().toISOString().slice(0, 10),
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // 30 days from now
       status: 'posted' as const,
@@ -286,7 +379,7 @@ export const purchaseOrderStore = {
       tax: po.tax,
       total: po.total,
     };
-    
+
     // Create vendor bill
     const bill: VendorBill = {
       ...billData,
@@ -298,14 +391,7 @@ export const purchaseOrderStore = {
       updatedAt: new Date().toISOString().slice(0, 10),
     };
     vendorBills = [...vendorBills, bill];
-    
-    // Update budget with actual expenses
-    po.lineItems.forEach(li => {
-      if (li.costCenterId) {
-        budgetStore.addActual(li.costCenterId, li.amount);
-      }
-    });
-    
+    // Budget updates when payment is recorded (recordPayment), not when bill is created
     return purchaseOrderStore.getById(po.id)!;
   },
   update: (id: string, data: Partial<PurchaseOrder>): PurchaseOrder | undefined => {
@@ -324,7 +410,8 @@ let vendorBills: VendorBill[] = [
     billNumber: 'VB-2024-001',
     purchaseOrderId: 'po1',
     vendorId: 'c1',
-    vendorName: 'ABC Furniture Mart',
+    vendorName: 'Sharma Furniture Mart',
+    billReference: 'REF-001',
     billDate: '2024-01-20',
     dueDate: '2024-02-20',
     status: 'posted',
@@ -360,7 +447,14 @@ export const vendorBillStore = {
       updatedAt: new Date().toISOString().slice(0, 10),
     };
     vendorBills = [...vendorBills, bill];
+    // Budget updates when payment is recorded (recordPayment)
     return vendorBillStore.getById(bill.id)!;
+  },
+  update: (id: string, data: Partial<VendorBill>): VendorBill | undefined => {
+    const idx = vendorBills.findIndex(vb => vb.id === id);
+    if (idx === -1) return undefined;
+    vendorBills = [...vendorBills.slice(0, idx), { ...vendorBills[idx], ...data }, ...vendorBills.slice(idx + 1)];
+    return vendorBills.find(vb => vb.id === id);
   },
   recordPayment: (billId: string, amount: number): void => {
     const idx = vendorBills.findIndex(vb => vb.id === billId);
@@ -369,8 +463,12 @@ export const vendorBillStore = {
     const newPaid = vb.paidAmount + amount;
     const paymentStatus: VendorBill['paymentStatus'] = newPaid >= vb.total ? 'paid' : newPaid > 0 ? 'partially_paid' : 'not_paid';
     vendorBills = [...vendorBills.slice(0, idx), { ...vb, paidAmount: newPaid, paymentStatus, updatedAt: new Date().toISOString().slice(0, 10) }, ...vendorBills.slice(idx + 1)];
+    // Update budget when payment is made - allocate payment proportionally to each line item's cost center
     vb.lineItems.forEach(li => {
-      if (li.costCenterId) budgetStore.addActual(li.costCenterId, (amount / vb.total) * li.amount);
+      if (li.costCenterId && vb.total > 0) {
+        const allocatedAmount = (amount / vb.total) * li.amount;
+        budgetStore.addActual(li.costCenterId, allocatedAmount);
+      }
     });
   },
 };
@@ -397,7 +495,7 @@ let salesOrders: SalesOrder[] = [
     id: 'so1',
     orderNumber: 'SO-2024-001',
     customerId: 'c2',
-    customerName: 'John Customer',
+    customerName: 'Yash Mehta',
     orderDate: '2024-01-18',
     status: 'posted',
     lineItems: [
@@ -440,7 +538,7 @@ let customerInvoices: CustomerInvoice[] = [
     invoiceNumber: 'INV-2024-001',
     salesOrderId: 'so1',
     customerId: 'c2',
-    customerName: 'John Customer',
+    customerName: 'Raj Malhotra',
     invoiceDate: '2024-01-19',
     dueDate: '2024-02-19',
     status: 'posted',
@@ -478,6 +576,12 @@ export const customerInvoiceStore = {
     };
     customerInvoices = [...customerInvoices, inv];
     return customerInvoiceStore.getById(inv.id)!;
+  },
+  update: (id: string, data: Partial<CustomerInvoice>): CustomerInvoice | undefined => {
+    const idx = customerInvoices.findIndex(inv => inv.id === id);
+    if (idx === -1) return undefined;
+    customerInvoices = [...customerInvoices.slice(0, idx), { ...customerInvoices[idx], ...data, updatedAt: new Date().toISOString().slice(0, 10) }, ...customerInvoices.slice(idx + 1)];
+    return customerInvoiceStore.getById(id);
   },
   recordPayment: (invoiceId: string, amount: number): void => {
     const idx = customerInvoices.findIndex(inv => inv.id === invoiceId);

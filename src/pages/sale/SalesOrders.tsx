@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Pencil, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { ORDER_STATUSES } from '@/lib/constants';
 const statusMap = Object.fromEntries(ORDER_STATUSES.map(s => [s.value, s]));
 
 export default function SalesOrders() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const all = salesOrderStore.getAll();
@@ -50,23 +51,23 @@ export default function SalesOrders() {
                 <TableHead>Date</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No sales orders.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No sales orders.</TableCell></TableRow>
               ) : (
                 filtered.map(so => (
-                  <TableRow key={so.id}>
+                  <TableRow
+                    key={so.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/sale/orders/${so.id}/edit`)}
+                  >
                     <TableCell className="font-medium">{so.orderNumber}</TableCell>
                     <TableCell>{so.customerName ?? so.customerId}</TableCell>
                     <TableCell>{so.orderDate}</TableCell>
                     <TableCell>Rs.{so.total.toLocaleString()}</TableCell>
                     <TableCell><Badge variant="secondary">{so.status}</Badge></TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" asChild><Link to={`/sale/orders/${so.id}/edit`}><Pencil className="h-4 w-4" /></Link></Button>
-                    </TableCell>
                   </TableRow>
                 ))
               )}

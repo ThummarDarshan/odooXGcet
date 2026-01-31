@@ -1,5 +1,6 @@
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil, History, TrendingUp, TrendingDown, Receipt } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Pencil, History, Receipt, RefreshCw, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DocumentLayout } from '@/components/layout/DocumentLayout';
 import { budgetStore, purchaseOrderStore, vendorBillStore } from '@/services/mockData';
 
 function getStatusBadge(status: string) {
@@ -21,7 +23,9 @@ function getStatusBadge(status: string) {
 }
 
 export default function BudgetDetail() {
+  const navigate = useNavigate();
   const { id } = useParams();
+  const [refreshKey, setRefreshKey] = useState(0);
   const budget = id ? budgetStore.getById(id) : undefined;
   const revisions = id ? budgetStore.getRevisions(id) : [];
 
@@ -39,9 +43,10 @@ export default function BudgetDetail() {
           .filter(li => li.costCenterId === budget?.costCenterId)
           .reduce((sum, li) => sum + li.amount, 0),
         vendor: po.vendorName,
-        link: `/purchase/orders/${po.id}`,
+        link: `/purchase/orders/${po.id}/edit`,
         icon: TrendingUp,
-        color: 'text-blue-600'
+        color: 'text-blue-600',
+        paymentStatus: undefined, // Add this to satisfy the union type
       })),
     // Vendor bills
     ...vendorBillStore.getAll()
@@ -55,12 +60,13 @@ export default function BudgetDetail() {
           .filter(li => li.costCenterId === budget?.costCenterId)
           .reduce((sum, li) => sum + li.amount, 0),
         vendor: vb.vendorName,
-        link: `/purchase/bills/${vb.id}`,
+        link: `/purchase/bills/${vb.id}/edit`,
         icon: Receipt,
-        color: 'text-orange-600'
+        color: 'text-orange-600',
+        paymentStatus: vb.paymentStatus
       }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-   .slice(0, 10); // Show last 10 transactions
+    .slice(0, 10); // Show last 10 transactions
 
   if (!budget) {
     return (
@@ -72,25 +78,28 @@ export default function BudgetDetail() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/account/budgets" className="flex items-center gap-2">
-              <ArrowLeft className="h-4 w-4" /> Back to Budgets
-            </Link>
+    <DocumentLayout
+      title={budget.name}
+      subtitle={`${budget.costCenterName} • ${budget.periodStart} → ${budget.periodEnd}`}
+      backTo="/account/budgets"
+      status={budget.stage}
+      statusOptions={['Draft', 'Confirmed', 'Revised', 'Archived']}
+      actions={
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" onClick={() => setRefreshKey(k => k + 1)} title="Refresh">
+            <RefreshCw className="h-4 w-4" />
           </Button>
-          <h1 className="text-2xl font-bold mt-2">{budget.name}</h1>
-          <p className="text-muted-foreground">{budget.costCenterName} - {budget.periodStart} to {budget.periodEnd}</p>
+          {budget.stage !== 'archived' && (
+            <Button asChild>
+              <Link to={`/account/budgets/${budget.id}/edit`}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit Budget
+              </Link>
+            </Button>
+          )}
         </div>
-        <Button asChild>
-          <Link to={`/account/budgets/${budget.id}/edit`}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit Budget
-          </Link>
-        </Button>
-      </div>
-
+      }
+    >
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -98,28 +107,33 @@ export default function BudgetDetail() {
             <CardDescription>Planned vs actual</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center border-b pb-2">
               <span className="text-muted-foreground">Planned Amount</span>
-              <span className="font-medium">Rs.{budget.plannedAmount.toLocaleString()}</span>
+              <span className="font-medium font-mono text-lg">₹{budget.plannedAmount.toLocaleString('en-IN')}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center border-b pb-2">
               <span className="text-muted-foreground">Actual Amount</span>
-              <span className="font-medium">Rs.{budget.actualAmount.toLocaleString()}</span>
+              <span className="font-medium font-mono text-lg">₹{budget.actualAmount.toLocaleString('en-IN')}</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center border-b pb-2">
               <span className="text-muted-foreground">Remaining Balance</span>
-              <span className={budget.remainingBalance < 0 ? 'font-medium text-destructive' : 'font-medium'}>
-                Rs.{budget.remainingBalance.toLocaleString()}
+              <span className={`font-mono text-lg ${budget.remainingBalance < 0 ? 'font-bold text-destructive' : 'font-medium text-green-600'}`}>
+                ₹{budget.remainingBalance.toLocaleString('en-IN')}
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 pt-2">
               <div className="flex justify-between text-sm">
-                <span>Achievement</span>
-                <span>{budget.achievementPercentage}%</span>
+                <span className="text-muted-foreground font-medium">Achievement</span>
+                <span className={`font-bold ${budget.status === 'over_budget' ? 'text-destructive' : 'text-primary'}`}>
+                  {budget.achievementPercentage}%
+                </span>
               </div>
-              <Progress value={Math.min(budget.achievementPercentage, 100)} className="h-2" />
+              <Progress
+                value={Math.min(budget.achievementPercentage, 100)}
+                className={`h-2 ${budget.status === 'over_budget' ? '[&>*]:bg-destructive' : '[&>*]:bg-primary'}`}
+              />
             </div>
-            <div>{getStatusBadge(budget.status)}</div>
+            <div className="pt-2">{getStatusBadge(budget.status)}</div>
           </CardContent>
         </Card>
 
@@ -133,7 +147,7 @@ export default function BudgetDetail() {
           </CardHeader>
           <CardContent>
             {revisions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No revisions yet.</p>
+              <p className="text-sm text-muted-foreground italic">No revisions recorded.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -147,10 +161,10 @@ export default function BudgetDetail() {
                 <TableBody>
                   {revisions.map(rev => (
                     <TableRow key={rev.id}>
-                      <TableCell>{rev.revisedAt.slice(0, 10)}</TableCell>
-                      <TableCell>Rs.{rev.previousAmount.toLocaleString()}</TableCell>
-                      <TableCell>Rs.{rev.newAmount.toLocaleString()}</TableCell>
-                      <TableCell>{rev.reason}</TableCell>
+                      <TableCell className="text-xs">{rev.revisedAt.slice(0, 10)}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">₹{rev.previousAmount.toLocaleString('en-IN')}</TableCell>
+                      <TableCell className="font-mono text-xs font-medium">₹{rev.newAmount.toLocaleString('en-IN')}</TableCell>
+                      <TableCell className="text-xs">{rev.reason}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -160,17 +174,17 @@ export default function BudgetDetail() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="mt-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingDown className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4" />
             Recent Transactions
           </CardTitle>
           <CardDescription>Purchase orders and vendor bills affecting this budget</CardDescription>
         </CardHeader>
         <CardContent>
           {recentTransactions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No transactions yet.</p>
+            <p className="text-sm text-muted-foreground italic py-4 text-center">No transactions affecting this budget yet.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -180,14 +194,17 @@ export default function BudgetDetail() {
                   <TableHead>Reference</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentTransactions.map(tx => {
                   const Icon = tx.icon;
                   return (
-                    <TableRow key={tx.id}>
+                    <TableRow
+                      key={tx.id}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(tx.link)}
+                    >
                       <TableCell>{tx.date}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -197,13 +214,8 @@ export default function BudgetDetail() {
                       </TableCell>
                       <TableCell className="font-medium">{tx.reference}</TableCell>
                       <TableCell>{tx.vendor}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        Rs.{tx.amount.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link to={tx.link}>View</Link>
-                        </Button>
+                      <TableCell className="text-right font-medium font-mono">
+                        ₹{tx.amount.toLocaleString('en-IN')}
                       </TableCell>
                     </TableRow>
                   );
@@ -213,6 +225,6 @@ export default function BudgetDetail() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </DocumentLayout>
   );
 }

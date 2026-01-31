@@ -64,7 +64,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
+          <div className="h-10 w-10 rounded-xl bg-sidebar-primary flex items-center justify-center">
             <span className="text-lg font-bold text-sidebar-primary-foreground">SF</span>
           </div>
           <div className="flex flex-col">

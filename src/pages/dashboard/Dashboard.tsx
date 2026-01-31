@@ -1,7 +1,7 @@
-import { 
-  DollarSign, 
-  ShoppingCart, 
-  TrendingUp, 
+import {
+  DollarSign,
+  ShoppingCart,
+  TrendingUp,
   TrendingDown,
   Receipt,
   AlertTriangle,
@@ -13,13 +13,13 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -28,23 +28,7 @@ import {
   Line,
   Legend
 } from 'recharts';
-
-// Mock data for charts
-const budgetVsActualData = [
-  { name: 'Manufacturing', planned: 50000, actual: 42000 },
-  { name: 'Marketing', planned: 25000, actual: 28000 },
-  { name: 'Operations', planned: 30000, actual: 26000 },
-  { name: 'Logistics', planned: 20000, actual: 18500 },
-  { name: 'Admin', planned: 15000, actual: 14200 },
-];
-
-const costCenterData = [
-  { name: 'Manufacturing', value: 42000, percentage: 33 },
-  { name: 'Marketing', value: 28000, percentage: 22 },
-  { name: 'Operations', value: 26000, percentage: 20 },
-  { name: 'Logistics', value: 18500, percentage: 14 },
-  { name: 'Admin', value: 14200, percentage: 11 },
-];
+import { budgetStore } from '@/services/mockData';
 
 const monthlyTrendData = [
   { month: 'Jan', revenue: 125000, expenses: 95000 },
@@ -55,27 +39,42 @@ const monthlyTrendData = [
   { month: 'Jun', revenue: 175000, expenses: 118000 },
 ];
 
-const budgetUtilization = [
-  { name: 'Manufacturing', utilized: 84, planned: 50000, actual: 42000, status: 'under' },
-  { name: 'Marketing', utilized: 112, planned: 25000, actual: 28000, status: 'over' },
-  { name: 'Operations', utilized: 87, planned: 30000, actual: 26000, status: 'under' },
-  { name: 'Logistics', utilized: 93, planned: 20000, actual: 18500, status: 'warning' },
-  { name: 'Admin', utilized: 95, planned: 15000, actual: 14200, status: 'warning' },
-];
+const COLORS = ['hsl(160, 84%, 39%)', 'hsl(160, 84%, 35%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(0, 72%, 51%)'];
 
-const COLORS = ['hsl(221, 83%, 53%)', 'hsl(142, 76%, 36%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(0, 84%, 60%)'];
+function getBudgetChartData() {
+  const budgets = budgetStore.getAll();
+  const budgetVsActualData = budgets.map(b => ({
+    name: b.costCenterName ?? b.costCenterId,
+    planned: b.plannedAmount,
+    actual: b.actualAmount,
+  }));
+  const totalActual = budgets.reduce((s, b) => s + b.actualAmount, 0);
+  const costCenterData = budgets.map(b => ({
+    name: b.costCenterName ?? b.costCenterId,
+    value: b.actualAmount,
+    percentage: totalActual > 0 ? Math.round((b.actualAmount / totalActual) * 100) : 0,
+  }));
+  const budgetUtilization = budgets.map(b => ({
+    name: b.costCenterName ?? b.costCenterId,
+    utilized: b.achievementPercentage,
+    planned: b.plannedAmount,
+    actual: b.actualAmount,
+    status: b.status === 'over_budget' ? 'over' : b.status === 'near_limit' ? 'warning' : 'under',
+  }));
+  return { budgetVsActualData, costCenterData, budgetUtilization };
+}
 
-function MetricCard({ 
-  title, 
-  value, 
-  change, 
-  changeType, 
-  icon: Icon 
-}: { 
-  title: string; 
-  value: string; 
-  change: string; 
-  changeType: 'positive' | 'negative'; 
+function MetricCard({
+  title,
+  value,
+  change,
+  changeType,
+  icon: Icon
+}: {
+  title: string;
+  value: string;
+  change: string;
+  changeType: 'positive' | 'negative';
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
@@ -117,18 +116,17 @@ function BudgetProgressBar({ name, utilized, status }: { name: string; utilized:
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium">{name}</span>
         <div className="flex items-center gap-2">
-          <span className={`text-xs px-2 py-0.5 rounded ${
-            status === 'over' ? 'bg-destructive/10 text-destructive' :
-            status === 'warning' ? 'bg-warning/10 text-warning' :
-            'bg-success/10 text-success'
-          }`}>
+          <span className={`text-xs px-2 py-0.5 rounded ${status === 'over' ? 'bg-destructive/10 text-destructive' :
+              status === 'warning' ? 'bg-warning/10 text-warning' :
+                'bg-success/10 text-success'
+            }`}>
             {getStatusText()}
           </span>
           <span className="font-medium">{utilized}%</span>
         </div>
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
-        <div 
+        <div
           className={`h-full ${getStatusColor()} transition-all`}
           style={{ width: `${Math.min(utilized, 100)}%` }}
         />
@@ -138,6 +136,7 @@ function BudgetProgressBar({ name, utilized, status }: { name: string; utilized:
 }
 
 export default function Dashboard() {
+  const { budgetVsActualData, costCenterData, budgetUtilization } = getBudgetChartData();
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -146,20 +145,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Welcome back! Here's an overview of your business.</p>
         </div>
-        <div className="flex gap-2">
-          <Button asChild>
-            <Link to="/sale/invoices/create">
-              <Plus className="h-4 w-4 mr-2" />
-              New Invoice
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/sale/payments/create">
-              <Receipt className="h-4 w-4 mr-2" />
-              Record Payment
-            </Link>
-          </Button>
-        </div>
+
       </div>
 
       {/* Metrics Cards */}
@@ -203,26 +189,32 @@ export default function Dashboard() {
             <CardDescription>Comparison by cost center</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={budgetVsActualData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                  <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: number) => [`₹${value.toLocaleString()}`, '']}
-                  />
-                  <Legend />
-                  <Bar dataKey="planned" fill="hsl(var(--muted-foreground))" name="Planned" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {budgetVsActualData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-muted-foreground">No budgets configured. <Link to="/account/budgets/create" className="text-primary underline">Create a budget</Link> to see comparison.</p>
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={budgetVsActualData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [`₹${value.toLocaleString()}`, '']}
+                    />
+                    <Legend />
+                    <Bar dataKey="planned" fill="hsl(var(--muted-foreground))" name="Planned" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -233,35 +225,41 @@ export default function Dashboard() {
             <CardDescription>By cost center</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={costCenterData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
-                    dataKey="value"
-                    label={({ name, percentage }) => `${name} (${percentage}%)`}
-                    labelLine={false}
-                  >
-                    {costCenterData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Amount']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {costCenterData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-muted-foreground">No budget data yet.</p>
+              </div>
+            ) : (
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={costCenterData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      label={({ name, percentage }) => `${name} (${percentage}%)`}
+                      labelLine={false}
+                    >
+                      {costCenterData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Amount']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -278,14 +276,18 @@ export default function Dashboard() {
             <CardDescription>Current period progress</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {budgetUtilization.map((budget) => (
-              <BudgetProgressBar 
-                key={budget.name}
-                name={budget.name}
-                utilized={budget.utilized}
-                status={budget.status}
-              />
-            ))}
+            {budgetUtilization.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No budgets configured. <Link to="/account/budgets/create" className="text-primary underline">Create a budget</Link> to track spending.</p>
+            ) : (
+              budgetUtilization.map((budget) => (
+                <BudgetProgressBar
+                  key={budget.name}
+                  name={budget.name}
+                  utilized={budget.utilized}
+                  status={budget.status}
+                />
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -302,27 +304,27 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px'
                     }}
                     formatter={(value: number) => [`₹${value.toLocaleString()}`, '']}
                   />
                   <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="hsl(var(--success))" 
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="hsl(var(--success))"
                     strokeWidth={2}
                     dot={{ fill: 'hsl(var(--success))' }}
                     name="Revenue"
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="expenses" 
-                    stroke="hsl(var(--destructive))" 
+                  <Line
+                    type="monotone"
+                    dataKey="expenses"
+                    stroke="hsl(var(--destructive))"
                     strokeWidth={2}
                     dot={{ fill: 'hsl(var(--destructive))' }}
                     name="Expenses"
