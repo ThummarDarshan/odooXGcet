@@ -24,6 +24,7 @@ const routeLabels: Record<string, string> = {
   budget: 'Budget Report',
   'payment-status': 'Payment Status',
   portal: 'Customer Portal',
+  pay: 'Pay Now',
   create: 'Create New',
   edit: 'Edit',
 };

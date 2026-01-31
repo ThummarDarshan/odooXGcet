@@ -54,6 +54,7 @@ export const ADMIN_NAV_ITEMS = [
       { title: 'Cost Centers', path: '/account/cost-centers' },
       { title: 'Budgets', path: '/account/budgets' },
       { title: 'Auto Analytical Models', path: '/account/analytical-models' },
+      { title: 'Create User', path: '/account/users/create' },
     ],
   },
   {
@@ -98,11 +99,6 @@ export const CUSTOMER_NAV_ITEMS = [
     title: 'My Invoices',
     path: '/portal/invoices',
     icon: 'FileText',
-  },
-  {
-    title: 'Payment History',
-    path: '/portal/payments',
-    icon: 'CreditCard',
   },
 ];
 

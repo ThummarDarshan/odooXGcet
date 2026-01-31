@@ -1,0 +1,64 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Plus, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { invoicePaymentStore } from '@/services/mockData';
+import { PAYMENT_MODES } from '@/lib/constants';
+
+const modeMap = Object.fromEntries(PAYMENT_MODES.map(m => [m.value, m.label]));
+
+export default function InvoicePayments() {
+  const [search, setSearch] = useState('');
+  const all = invoicePaymentStore.getAll();
+  const filtered = all.filter(ip => !search || (ip.invoiceNumber ?? '').toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div><h1 className="text-2xl font-bold">Invoice Payments</h1><p className="text-muted-foreground">Record payments against customer invoices</p></div>
+        <Button asChild><Link to="/sale/payments/create"><Plus className="h-4 w-4 mr-2" /> Record Payment</Link></Button>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment History</CardTitle>
+          <CardDescription>All invoice payments</CardDescription>
+          <div className="relative max-w-sm pt-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search by invoice #..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invoice #</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Mode</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Reference</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No payments.</TableCell></TableRow>
+              ) : (
+                filtered.map(ip => (
+                  <TableRow key={ip.id}>
+                    <TableCell className="font-medium">{ip.invoiceNumber ?? ip.invoiceId}</TableCell>
+                    <TableCell>Rs.{ip.amount.toLocaleString()}</TableCell>
+                    <TableCell>{modeMap[ip.paymentMode] ?? ip.paymentMode}</TableCell>
+                    <TableCell>{ip.paymentDate}</TableCell>
+                    <TableCell>{ip.referenceId ?? '-'}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
