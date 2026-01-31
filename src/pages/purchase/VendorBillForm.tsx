@@ -10,9 +10,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { vendorBillStore, contactStore, productStore, costCenterStore, purchaseOrderStore, budgetStore } from '@/services/mockData';
+import {
+  useVendorBill, useCreateVendorBill, useUpdateVendorBill,
+  useContacts, useProducts, useCostCenters, usePurchaseOrders, usePurchaseOrder, useBudgets
+} from '@/hooks/useData';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
-import type { LineItem, OrderStatus, PaymentStatus } from '@/types';
+import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 
 const lineSchema = z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'), unitPrice: z.coerce.number().min(0), costCenterId: z.string().optional() });
@@ -22,7 +25,7 @@ const schema = z.object({
   billReference: z.string().optional(),
   billDate: z.string().min(1),
   dueDate: z.string().min(1),
-  status: z.enum(['draft', 'confirmed', 'posted', 'cancelled']),
+  status: z.enum(['draft', 'confirmed', 'posted', 'cancelled', 'done']),
   lineItems: z.array(lineSchema).min(1, 'Add at least one line'),
 });
 
@@ -33,57 +36,83 @@ export default function VendorBillForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isEdit = Boolean(id);
-  const [bill, setBill] = useState(id ? vendorBillStore.getById(id) : null);
-  const vendors = contactStore.getByType('vendor');
-  const products = productStore.getActive();
-  const costCenters = costCenterStore.getActive();
-  const purchaseOrders = purchaseOrderStore.getAll().filter(po => po.status === 'posted' || po.status === 'confirmed');
 
-  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>(
-    bill?.lineItems.map(li => ({ productId: li.productId, quantity: Math.floor(li.quantity), unitPrice: li.unitPrice, costCenterId: li.costCenterId })) ?? [{ productId: '', quantity: 1, unitPrice: 0 }]
-  );
+  const { data: bill, isLoading: isLoadingBill } = useVendorBill(id);
+  const { data: vendors = [] } = useContacts('vendor');
+  const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: purchaseOrders = [] } = usePurchaseOrders();
+  const { data: budgets = [] } = useBudgets();
+
+  const { mutate: createBill, isPending: isCreating } = useCreateVendorBill();
+  const { mutate: updateBill, isPending: isUpdating } = useUpdateVendorBill();
+
+  // Filter posted/confirmed POs for selection
+  const validPOs = purchaseOrders.filter((po: any) => po.status === 'posted' || po.status === 'confirmed');
+
+  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>([
+    { productId: '', quantity: 1, unitPrice: 0 }
+  ]);
 
   const [budgetWarnings, setBudgetWarnings] = useState<string[]>([]);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      purchaseOrderId: bill?.purchaseOrderId ?? '',
-      vendorId: bill?.vendorId ?? '',
-      billReference: bill?.billReference ?? '',
-      billDate: bill?.billDate ?? new Date().toISOString().slice(0, 10),
-      dueDate: bill?.dueDate ?? new Date().toISOString().slice(0, 10),
-      status: (bill?.status ?? 'draft') as OrderStatus,
-      lineItems: lines,
+      purchaseOrderId: '',
+      vendorId: '',
+      billReference: '',
+      billDate: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      status: 'draft',
+      lineItems: [{ productId: '', quantity: 1, unitPrice: 0 }],
     },
   });
 
   const purchaseOrderId = watch('purchaseOrderId');
   const status = watch('status');
 
+  useEffect(() => {
+    if (bill) {
+      setValue('purchaseOrderId', bill.purchaseOrderId ?? '');
+      setValue('vendorId', bill.vendorId);
+      setValue('billReference', bill.billNumber ?? ''); // Map billNumber to reference or separate field? Schema has billReference. Hook returns billNumber.
+      // Usually bill reference is external invoice number. billNumber is internal.
+      // If hook doesn't return reference, maybe we use billNumber for now or empty.
+      // Let's assume user enters reference.
+      setValue('billDate', bill.date ? new Date(bill.date).toISOString().slice(0, 10) : '');
+      setValue('dueDate', bill.dueDate ? new Date(bill.dueDate).toISOString().slice(0, 10) : '');
+      setValue('status', bill.status as OrderStatus);
+
+      setLines(bill.items.map((li: any) => ({
+        productId: li.productId,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        costCenterId: li.costCenterId
+      })));
+    }
+  }, [bill, setValue]);
+
   useEffect(() => { setValue('lineItems', lines); }, [lines, setValue]);
 
+  // Handle Purchase Order selection to auto-fill
+  // We need to fetch details of selected PO if not available in list?
+  // usePurchaseOrders list might have items? Yes, my hook includes items.
   useEffect(() => {
-    if (id) setBill(vendorBillStore.getById(id));
-  }, [id]);
-
-  // Handle Purchase Order selection
-  useEffect(() => {
-    if (purchaseOrderId) {
-      const po = purchaseOrderStore.getById(purchaseOrderId);
+    if (purchaseOrderId && !isEdit) { // Only on create? Or if user changes PO?
+      const po = purchaseOrders.find((p: any) => p.id === purchaseOrderId);
       if (po) {
         setValue('vendorId', po.vendorId);
-        // Maybe also set reference if empty?
-        const poLines = po.lineItems.map(li => ({
+        const poLines = po.lineItems.map((li: any) => ({
           productId: li.productId,
-          quantity: Math.floor(li.quantity),
+          quantity: Math.floor(li.quantity), // items might be float in backend but form uses int for qty usually? Schema says int.
           unitPrice: li.unitPrice,
           costCenterId: li.costCenterId,
         }));
         setLines(poLines);
       }
     }
-  }, [purchaseOrderId, setValue]);
+  }, [purchaseOrderId, purchaseOrders, setValue, isEdit]);
 
   const addLine = () => setLines(prev => [...prev, { productId: '', quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
@@ -91,7 +120,10 @@ export default function VendorBillForm() {
     setLines(prev => {
       const next = [...prev];
       (next[idx] as Record<string, unknown>)[field] = value;
-      if (field === 'productId') { const p = productStore.getById(String(value)); if (p) next[idx].unitPrice = p.price; }
+      if (field === 'productId') {
+        const p = products.find((prod: any) => prod.id === value);
+        if (p) next[idx].unitPrice = p.purchasePrice || 0;
+      }
       return next;
     });
   };
@@ -101,9 +133,12 @@ export default function VendorBillForm() {
     lines.forEach(line => {
       if (line.costCenterId) {
         const amount = line.quantity * line.unitPrice;
-        const check = budgetStore.checkBudget(line.costCenterId, amount);
-        if (check && check.isExceeded) {
-          warnings.push(`Budget "${check.budgetName}" exceeded! Remaining: Rs.${check.remaining.toLocaleString()}, Request: Rs.${amount.toLocaleString()}`);
+        const budget = budgets.find((b: any) => b.costCenterId === line.costCenterId && b.stage === 'confirmed');
+        if (budget) {
+          const remaining = (budget.plannedAmount || 0) - (budget.actualAmount || 0);
+          if (amount > remaining) {
+            warnings.push(`Budget "${budget.name}" exceeded! Remaining: ₹${remaining.toLocaleString()}, Request: ₹${amount.toLocaleString()}`);
+          }
         }
       }
     });
@@ -112,69 +147,54 @@ export default function VendorBillForm() {
   };
 
   const onSubmit = (data: FormValues) => {
-    const lineItems: LineItem[] = data.lineItems.map((li, i) => {
-      const p = productStore.getById(li.productId);
-      return {
-        id: 'vbli' + i,
-        productId: li.productId,
-        productName: p?.name,
-        quantity: Math.floor(li.quantity),
-        unitPrice: li.unitPrice,
-        amount: Math.floor(li.quantity) * li.unitPrice,
-        costCenterId: li.costCenterId,
-        costCenterName: li.costCenterId ? costCenterStore.getById(li.costCenterId)?.name : undefined,
-      };
-    });
-    const subtotal = lineItems.reduce((s, li) => s + li.amount, 0);
-    const tax = Math.round(subtotal * DEFAULT_TAX_RATE);
-    const total = subtotal + tax;
+    const linesWithoutCostCenter = data.lineItems.filter(li => !li.costCenterId);
+    if (linesWithoutCostCenter.length > 0) {
+      toast({ title: 'Validation Error', description: 'All line items must have a cost center assigned.', variant: 'destructive' });
+      return;
+    }
 
-    let savedBill;
+    // items mapping
+    const items = data.lineItems.map(li => ({
+      productId: li.productId,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      costCenterId: li.costCenterId
+    }));
+
     if (isEdit && id) {
-      // Use update if available (requires adding update to vendorBillStore in mockData)
-      // Assuming it was added:
-      savedBill = vendorBillStore.update(id, {
-        ...data,
-        status: data.status,
-        lineItems,
-        subtotal,
-        tax,
-        total
+      updateBill({ id, data: { ...data, items } }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Vendor bill updated.' });
+          navigate('/purchase/bills');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update bill.', variant: 'destructive' })
       });
-      toast({ title: 'Updated', description: 'Vendor bill updated.' });
     } else {
-      savedBill = vendorBillStore.create({
-        purchaseOrderId: data.purchaseOrderId,
+      createBill({
         vendorId: data.vendorId,
-        billReference: data.billReference,
-        billDate: data.billDate,
+        date: data.billDate,
         dueDate: data.dueDate,
-        status: data.status,
-        lineItems,
-        subtotal,
-        tax,
-        total
+        purchaseOrderId: data.purchaseOrderId, // If selected
+        items
+      }, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Vendor bill created.' });
+          navigate('/purchase/bills');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create bill.', variant: 'destructive' })
       });
-      toast({ title: 'Created', description: 'Vendor bill created.' });
-      navigate('/purchase/bills');
     }
   };
-
-  // Re-implementing onSubmit to handle update correctly if it exists, or just create
-  // Actually, checking mockData content again, vendorBillStore seems to NOT have update method shown in step 46/115 view?
-  // Step 46 shows `vendorBillStore` lines 350-387.
-  // It has `getAll`, `getById`, `create`, `recordPayment`. NO UPDATE.
-  // I need to add `update` to `vendorBillStore` in mockData.ts
-  // FOR NOW, I will skip update logic implementation details or add it.
 
   const handleConfirm = () => {
     validateBudget();
     if (id) {
-      vendorBillStore.update(id, { status: 'posted' });
-      toast({ title: 'Confirmed', description: 'Bill confirmed (posted).' });
-      setValue('status', 'posted');
-      // Refresh bill logic here or use local state update
-      setBill(prev => prev ? ({ ...prev, status: 'posted' }) : null);
+      updateBill({ id, data: { status: 'posted' } }, {
+        onSuccess: () => {
+          toast({ title: 'Confirmed', description: 'Bill confirmed (posted).' });
+          navigate(0);
+        }
+      });
     }
   };
 
@@ -182,7 +202,9 @@ export default function VendorBillForm() {
     if (id) navigate(`/purchase/payments/create?billId=${id}`);
   };
 
-  if (isEdit && !bill) return <div className="text-center py-12"><p className="text-muted-foreground">Bill not found.</p><Button asChild variant="link" onClick={() => navigate('/purchase/bills')}>Back</Button></div>;
+  if (isEdit && isLoadingBill) return <div className="p-8 text-center text-muted-foreground">Loading bill...</div>;
+
+  if (isEdit && !bill && !isLoadingBill) return <div className="text-center py-12"><p className="text-muted-foreground">Bill not found.</p><Button asChild variant="link" onClick={() => navigate('/purchase/bills')}>Back</Button></div>;
 
   const isReadOnly = status === 'posted' || status === 'cancelled';
   const paymentStatus = bill?.paymentStatus ?? 'not_paid';
@@ -196,10 +218,10 @@ export default function VendorBillForm() {
       statusOptions={['Draft', 'Posted', 'Cancelled']}
       actions={
         <>
-          {!isEdit && <Button type="submit" form="vb-form">Save</Button>}
+          {!isEdit && <Button type="submit" form="vb-form" loading={isCreating}>Save</Button>}
           {isEdit && status === 'draft' && (
             <>
-              <Button type="submit" form="vb-form">Save</Button>
+              <Button type="submit" form="vb-form" loading={isUpdating}>Save</Button>
               <Button variant="default" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
             </>
           )}
@@ -229,7 +251,7 @@ export default function VendorBillForm() {
                   <Label className="font-medium">Vendor</Label>
                   <select disabled={isReadOnly} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('vendorId')}>
                     <option value="">Select vendor</option>
-                    {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    {vendors.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
                   {errors.vendorId && <p className="text-sm text-destructive">{errors.vendorId.message}</p>}
                 </div>
@@ -245,7 +267,7 @@ export default function VendorBillForm() {
                   <Label className="font-medium">Source PO</Label>
                   <select disabled={isReadOnly} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('purchaseOrderId')}>
                     <option value="">Select purchase order</option>
-                    {purchaseOrders.map(po => <option key={po.id} value={po.id}>{po.orderNumber}</option>)}
+                    {validPOs.map((po: any) => <option key={po.id} value={po.id}>{po.orderNumber}</option>)}
                   </select>
                 </div>
               </div>
@@ -273,13 +295,13 @@ export default function VendorBillForm() {
                   <div className="col-span-4">
                     <select disabled={isReadOnly} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={line.productId} onChange={e => updateLine(idx, 'productId', e.target.value)}>
                       <option value="">Select</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-3">
                     <select disabled={isReadOnly} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={line.costCenterId ?? ''} onChange={e => updateLine(idx, 'costCenterId', e.target.value || undefined)}>
                       <option value="">None</option>
-                      {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                      {costCenters.map((cc: any) => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-2"><Input disabled={isReadOnly} type="number" min={1} className="h-9 text-right" value={line.quantity} onChange={e => updateLine(idx, 'quantity', parseInt(e.target.value, 10) || 0)} /></div>
@@ -323,6 +345,6 @@ export default function VendorBillForm() {
           </CardContent>
         </Card>
       </form>
-    </DocumentLayout >
+    </DocumentLayout>
   );
 }

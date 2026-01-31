@@ -32,28 +32,28 @@ export function DocumentLayout({
     const navigate = useNavigate();
 
     return (
-        <div className={cn("flex flex-col gap-6 max-w-5xl mx-auto w-full", className)}>
+        <div className={cn("flex flex-col gap-4 max-w-5xl mx-auto w-full", className)}>
             {/* Header Section */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
                 {backTo && (
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-fit -ml-2 text-muted-foreground hover:text-foreground"
+                        className="h-7 w-fit -ml-2 text-xs text-muted-foreground hover:text-foreground"
                         onClick={() => navigate(backTo)}
                     >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        <ChevronLeft className="h-3.5 w-3.5 mr-1" />
                         {backText}
                     </Button>
                 )}
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-                        {subtitle && <div className="text-muted-foreground mt-1">{subtitle}</div>}
+                        <h1 className="text-xl font-bold tracking-tight">{title}</h1>
+                        {subtitle && <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                         {actions}
                     </div>
                 </div>
@@ -61,42 +61,15 @@ export function DocumentLayout({
 
             {/* Status Pipeline & Action Bar */}
             {(status || (statusOptions.length > 0)) && (
-                <Card className="rounded-lg shadow-sm border overflow-hidden">
-                    <div className="flex flex-col sm:flex-row p-1 sm:p-2 sm:items-center justify-between bg-muted/40">
-                        {/* Left side usually for primary call-to-actions, rendered by parent via 'actions' but we can also put status-specific bar here if needed. 
-                Actually, the 'actions' prop is better suited for the top header or this bar. 
-                Let's stick to the Odoo style where 'actions' are buttons on the left of the status bar.
-            */}
-
-                        {/* Note: The 'actions' prop passed to DocumentLayout is currently rendered in the top header. 
-                 To match Odoo style strictly, we might want another prop 'statusbarActions' 
-                 or just move the main 'actions' here. 
-                 For now, let's keep 'actions' in top header as per typical web apps, 
-                 BUT if we want Odoo style, we should probably have a 'statusbar' slot. 
-                 
-                 Let's assume the user provided `actions` are the main CREATE/EDIT buttons.
-                 We will add a specific prop `workflowActions` for the status bar buttons (Confirm, Cancel, etc).
-            */}
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between p-3 sm:px-4 gap-4 bg-background border-t sm:border-t-0">
-                        {/* Workflow Actions often go here on the left in Odoo, but let's keep it flexible. 
-                 We will just render the status pipeline on the right.
-             */}
-                        <div className="flex-1">
-                            {/* This space can be used for workflow buttons passed as children or a specialized prop. 
-                    For now, we'll let the parent handle the buttons in the 'actions' prop, 
-                    or render them at the top. 
-                    
-                    Wait, looking at the screenshot: 
-                    "Confirm | Print | Send | Cancel" buttons are in a bar on the left.
-                    "Draft > Confirm > Posted" status indicators are on the right.
-                */}
+                <Card className="rounded-md shadow-none border overflow-hidden bg-muted/20">
+                    <div className="flex flex-wrap items-center justify-between p-2 sm:px-3 gap-3">
+                        <div className="flex-1 overflow-hidden">
+                            {/* Workflow actions could be here, currently parent handles buttons */}
                         </div>
 
                         {/* Status Pipeline */}
                         {statusOptions.length > 0 && (
-                            <div className="flex items-center rounded-md border bg-muted/50 p-1">
+                            <div className="flex items-center rounded border bg-background/50 p-0.5">
                                 {statusOptions.map((option, idx) => {
                                     const isActive = (status || '').toLowerCase() === option.toLowerCase();
                                     const isPast = statusOptions.findIndex(o => o.toLowerCase() === (status || '').toLowerCase()) > idx;
@@ -105,18 +78,18 @@ export function DocumentLayout({
                                         <div key={option} className="flex items-center">
                                             <div
                                                 className={cn(
-                                                    "px-3 py-1 text-sm font-medium rounded-sm transition-colors cursor-default capitalize",
+                                                    "px-2.5 py-0.5 text-[11px] font-semibold rounded-sm transition-colors cursor-default capitalize",
                                                     isActive
-                                                        ? "bg-primary text-primary-foreground shadow-sm"
+                                                        ? "bg-primary text-primary-foreground shadow-xs"
                                                         : isPast
-                                                            ? "text-primary font-semibold"
-                                                            : "text-muted-foreground"
+                                                            ? "text-primary/80"
+                                                            : "text-muted-foreground/60"
                                                 )}
                                             >
                                                 {option}
                                             </div>
                                             {idx < statusOptions.length - 1 && (
-                                                <div className="h-4 w-px bg-border mx-1" />
+                                                <div className="h-3 w-px bg-border/60 mx-0.5" />
                                             )}
                                         </div>
                                     );
@@ -124,14 +97,14 @@ export function DocumentLayout({
                             </div>
                         )}
                         {status && statusOptions.length === 0 && (
-                            <Badge variant="outline" className="capitalize text-base px-3 py-1">{status}</Badge>
+                            <Badge variant="outline" className="capitalize text-xs px-2 py-0 h-5 font-medium">{status}</Badge>
                         )}
                     </div>
                 </Card>
             )}
 
             {/* Main Content */}
-            <div className="space-y-6">
+            <div className="space-y-4">
                 {children}
             </div>
         </div>

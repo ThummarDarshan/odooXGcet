@@ -12,7 +12,7 @@ import {
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   BarChart,
   Bar,
@@ -28,41 +28,14 @@ import {
   Line,
   Legend
 } from 'recharts';
-import { budgetStore } from '@/services/mockData';
-
-const monthlyTrendData = [
-  { month: 'Jan', revenue: 125000, expenses: 95000 },
-  { month: 'Feb', revenue: 142000, expenses: 98000 },
-  { month: 'Mar', revenue: 138000, expenses: 102000 },
-  { month: 'Apr', revenue: 155000, expenses: 108000 },
-  { month: 'May', revenue: 168000, expenses: 112000 },
-  { month: 'Jun', revenue: 175000, expenses: 118000 },
-];
+import {
+  useDashboardMetrics,
+  useDashboardTrends,
+  useDashboardExpenseDistribution,
+  useDashboardBudgets
+} from '@/hooks/useDashboard';
 
 const COLORS = ['hsl(160, 84%, 39%)', 'hsl(160, 84%, 35%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(0, 72%, 51%)'];
-
-function getBudgetChartData() {
-  const budgets = budgetStore.getAll();
-  const budgetVsActualData = budgets.map(b => ({
-    name: b.costCenterName ?? b.costCenterId,
-    planned: b.plannedAmount,
-    actual: b.actualAmount,
-  }));
-  const totalActual = budgets.reduce((s, b) => s + b.actualAmount, 0);
-  const costCenterData = budgets.map(b => ({
-    name: b.costCenterName ?? b.costCenterId,
-    value: b.actualAmount,
-    percentage: totalActual > 0 ? Math.round((b.actualAmount / totalActual) * 100) : 0,
-  }));
-  const budgetUtilization = budgets.map(b => ({
-    name: b.costCenterName ?? b.costCenterId,
-    utilized: b.achievementPercentage,
-    planned: b.plannedAmount,
-    actual: b.actualAmount,
-    status: b.status === 'over_budget' ? 'over' : b.status === 'near_limit' ? 'warning' : 'under',
-  }));
-  return { budgetVsActualData, costCenterData, budgetUtilization };
-}
 
 function MetricCard({
   title,
@@ -73,8 +46,8 @@ function MetricCard({
 }: {
   title: string;
   value: string;
-  change: string;
-  changeType: 'positive' | 'negative';
+  change?: string;
+  changeType?: 'positive' | 'negative';
   icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
@@ -85,14 +58,16 @@ function MetricCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
-        <div className={`flex items-center text-xs ${changeType === 'positive' ? 'text-success' : 'text-destructive'}`}>
-          {changeType === 'positive' ? (
-            <ArrowUpRight className="h-3 w-3 mr-1" />
-          ) : (
-            <ArrowDownRight className="h-3 w-3 mr-1" />
-          )}
-          {change} from last month
-        </div>
+        {change && (
+          <div className={`flex items-center text-xs ${changeType === 'positive' ? 'text-success' : 'text-destructive'}`}>
+            {changeType === 'positive' ? (
+              <ArrowUpRight className="h-3 w-3 mr-1" />
+            ) : (
+              <ArrowDownRight className="h-3 w-3 mr-1" />
+            )}
+            {change} from last month
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -117,8 +92,8 @@ function BudgetProgressBar({ name, utilized, status }: { name: string; utilized:
         <span className="font-medium">{name}</span>
         <div className="flex items-center gap-2">
           <span className={`text-xs px-2 py-0.5 rounded ${status === 'over' ? 'bg-destructive/10 text-destructive' :
-              status === 'warning' ? 'bg-warning/10 text-warning' :
-                'bg-success/10 text-success'
+            status === 'warning' ? 'bg-warning/10 text-warning' :
+              'bg-success/10 text-success'
             }`}>
             {getStatusText()}
           </span>
@@ -136,7 +111,75 @@ function BudgetProgressBar({ name, utilized, status }: { name: string; utilized:
 }
 
 export default function Dashboard() {
-  const { budgetVsActualData, costCenterData, budgetUtilization } = getBudgetChartData();
+  const { data: metrics, isLoading: loadingMetrics, error: errorMetrics } = useDashboardMetrics();
+  const { data: trends, isLoading: loadingTrends, error: errorTrends } = useDashboardTrends();
+  const { data: distribution, isLoading: loadingDistribution, error: errorDistribution } = useDashboardExpenseDistribution();
+  const { data: budgets, isLoading: loadingBudgets, error: errorBudgets } = useDashboardBudgets();
+
+  if (loadingMetrics || loadingTrends || loadingDistribution || loadingBudgets) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-[200px]" />
+          <Skeleton className="h-4 w-[300px]" />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array(4).fill(0).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-[100px]" />
+                <Skeleton className="h-4 w-4 rounded-full" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-[60px] mb-2" />
+                <Skeleton className="h-3 w-[120px]" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  // Check for errors
+  const hasError = errorMetrics || errorTrends || errorDistribution || errorBudgets;
+  if (hasError) {
+    return (
+      <div className="p-8 space-y-4">
+        <div className="flex flex-col items-center justify-center text-center space-y-4">
+          <AlertTriangle className="h-12 w-12 text-destructive" />
+          <div>
+            <h2 className="text-xl font-semibold">Failed to Load Dashboard Data</h2>
+            <p className="text-muted-foreground mt-2">
+              There was an error loading the dashboard. Please check your connection and try again.
+            </p>
+            {errorMetrics && <p className="text-sm text-destructive mt-2">Metrics: {(errorMetrics as any)?.message}</p>}
+            {errorTrends && <p className="text-sm text-destructive mt-2">Trends: {(errorTrends as any)?.message}</p>}
+            {errorDistribution && <p className="text-sm text-destructive mt-2">Distribution: {(errorDistribution as any)?.message}</p>}
+            {errorBudgets && <p className="text-sm text-destructive mt-2">Budgets: {(errorBudgets as any)?.message}</p>}
+          </div>
+          <Button onClick={() => window.location.reload()}>Reload Page</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const budgetVsActualData = budgets?.budgetVsActualData || [];
+  const budgetUtilization = budgets?.budgetUtilization || [];
+  const costCenterData = distribution || [];
+  // Calculate aggregate percentages for metric cards (Not implemented in backend yet, so hiding change or using 0)
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -152,30 +195,22 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Total Sales"
-          value="₹9,03,000"
-          change="+12.5%"
-          changeType="positive"
+          value={`₹${(metrics?.totalSales || 0).toLocaleString()}`}
           icon={TrendingUp}
         />
         <MetricCard
           title="Total Purchases"
-          value="₹5,28,700"
-          change="+8.2%"
-          changeType="positive"
+          value={`₹${(metrics?.totalPurchases || 0).toLocaleString()}`}
           icon={ShoppingCart}
         />
         <MetricCard
           title="Outstanding Receivables"
-          value="₹1,45,200"
-          change="-5.3%"
-          changeType="positive"
+          value={`₹${(metrics?.outstandingReceivables || 0).toLocaleString()}`}
           icon={DollarSign}
         />
         <MetricCard
           title="Outstanding Payables"
-          value="₹87,400"
-          change="+3.1%"
-          changeType="negative"
+          value={`₹${(metrics?.outstandingPayables || 0).toLocaleString()}`}
           icon={TrendingDown}
         />
       </div>
@@ -279,7 +314,7 @@ export default function Dashboard() {
             {budgetUtilization.length === 0 ? (
               <p className="text-sm text-muted-foreground">No budgets configured. <Link to="/account/budgets/create" className="text-primary underline">Create a budget</Link> to track spending.</p>
             ) : (
-              budgetUtilization.map((budget) => (
+              budgetUtilization.map((budget: any) => (
                 <BudgetProgressBar
                   key={budget.name}
                   name={budget.name}
@@ -300,7 +335,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyTrendData}>
+                <LineChart data={trends || []}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />

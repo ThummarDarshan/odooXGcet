@@ -85,6 +85,7 @@ export interface Budget {
   name: string;
   costCenterId: string;
   costCenterName?: string;
+  type: 'INCOME' | 'EXPENSE';
   periodStart: string;
   periodEnd: string;
   plannedAmount: number;
@@ -99,6 +100,14 @@ export interface Budget {
 
   // Performance Status (Calculated)
   status: BudgetStatus;
+  transactions?: {
+    id: string;
+    date: string;
+    reference: string;
+    partner: string;
+    amount: number;
+    type: string;
+  }[];
   createdAt: string;
   updatedAt: string;
 }

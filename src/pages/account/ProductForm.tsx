@@ -8,16 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { productStore } from '@/services/mockData';
+import { useProduct, useCreateProduct, useUpdateProduct, useArchiveProduct } from '@/hooks/useData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import type { Product } from '@/types';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   category: z.string().min(1, 'Category is required'),
   price: z.coerce.number().min(0, 'Price must be ≥ 0'),
   purchasePrice: z.coerce.number().min(0, 'Purchase Price must be ≥ 0'),
-  status: z.enum(['draft', 'confirmed', 'archived']),
+  status: z.enum(['confirmed', 'archived']),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -27,7 +28,13 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isEdit = Boolean(id);
-  const [product, setProduct] = useState(id ? productStore.getById(id) : null);
+
+  const { data: remoteProduct, isLoading: isLoadingProduct } = useProduct(id);
+  const { mutate: createProduct, isPending: isCreating } = useCreateProduct();
+  const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct();
+  const { mutate: archiveProduct } = useArchiveProduct();
+
+  const [product, setProduct] = useState<Product | undefined>();
 
   // Custom Category State
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -36,11 +43,11 @@ export default function ProductForm() {
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: product?.name ?? '',
-      category: product?.category ?? 'sofa',
-      price: product?.price ?? 0,
-      purchasePrice: product?.purchasePrice ?? 0,
-      status: product?.status ?? 'draft'
+      name: '',
+      category: 'sofa',
+      price: 0,
+      purchasePrice: 0,
+      status: 'confirmed'
     },
   });
 
@@ -48,28 +55,23 @@ export default function ProductForm() {
   const status = watch('status');
 
   useEffect(() => {
-    if (id) {
-      setProduct(productStore.getById(id));
-    }
-  }, [id]);
-
-  useEffect(() => {
-    if (product) {
+    if (remoteProduct) {
+      setProduct(remoteProduct);
       reset({
-        name: product.name,
-        category: product.category,
-        price: product.price,
-        purchasePrice: product.purchasePrice,
-        status: product.status
+        name: remoteProduct.name,
+        category: remoteProduct.category,
+        price: remoteProduct.price,
+        purchasePrice: remoteProduct.purchasePrice,
+        status: (remoteProduct.status as 'confirmed' | 'archived') || 'confirmed'
       });
       // Check if category is custom
-      const isStandard = PRODUCT_CATEGORIES.some(c => c.value === product.category);
-      if (!isStandard && product.category) {
+      const isStandard = PRODUCT_CATEGORIES.some(c => c.value === remoteProduct.category);
+      if (!isStandard && remoteProduct.category) {
         setIsCustomCategory(true);
-        setCustomCategory(product.category);
+        setCustomCategory(remoteProduct.category);
       }
     }
-  }, [product, reset]);
+  }, [remoteProduct, reset]);
 
   // Handle "Create New..." selection
   useEffect(() => {
@@ -83,39 +85,61 @@ export default function ProductForm() {
 
 
   const onSubmit = (data: FormValues) => {
-    // If custom category, use that value (it's bound to 'category' via register if using input)
-    // Actually, if isCustomCategory is true, we should ensure data.category comes from the custom input?
-    // See rendering logic below.
-
     if (isEdit && id) {
-      productStore.update(id, data);
-      toast({ title: 'Updated', description: 'Product updated successfully.' });
+      updateProduct({ id, data }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Product updated successfully.' });
+          navigate('/account/products');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update product', variant: 'destructive' })
+      });
     } else {
-      const newProduct = productStore.create(data as any);
-      toast({ title: 'Created', description: 'Product created successfully.' });
-      navigate('/account/products');
+      createProduct(data, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Product created successfully.' });
+          navigate('/account/products');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create product', variant: 'destructive' })
+      });
     }
   };
 
   const handleConfirm = () => {
     if (id) {
-      productStore.update(id, { status: 'confirmed' });
+      updateProduct({ id, data: { status: 'confirmed' } }, {
+        onSuccess: () => {
+          toast({ title: 'Confirmed', description: 'Product confirmed.' });
+          setValue('status', 'confirmed');
+          setProduct(prev => prev ? ({ ...prev, status: 'confirmed' }) : undefined);
+        }
+      });
+    } else {
       setValue('status', 'confirmed');
-      setProduct(prev => prev ? ({ ...prev, status: 'confirmed' }) : null);
-      toast({ title: 'Confirmed', description: 'Product confirmed.' });
     }
   };
 
   const handleArchive = () => {
     if (id) {
-      productStore.archive(id);
+      // Using archiveProduct which does DELETE /products/:id which soft deletes
+      archiveProduct(id, {
+        onSuccess: () => {
+          toast({ title: 'Archived', description: 'Product archived.' });
+          setValue('status', 'archived');
+          setProduct(prev => prev ? ({ ...prev, status: 'archived' }) : undefined);
+          navigate('/account/products');
+        }
+      });
+    } else {
       setValue('status', 'archived');
-      setProduct(prev => prev ? ({ ...prev, status: 'archived' }) : null);
-      toast({ title: 'Archived', description: 'Product archived.' });
+      navigate('/account/products');
     }
   };
 
-  if (isEdit && !product) {
+  if (isEdit && isLoadingProduct) {
+    return <div className="p-8 text-center text-muted-foreground">Loading product...</div>;
+  }
+
+  if (isEdit && !remoteProduct && !isLoadingProduct) {
     return <div className="text-center py-12"><p className="text-muted-foreground">Product not found.</p></div>;
   }
 
@@ -127,20 +151,15 @@ export default function ProductForm() {
       subtitle={isEdit ? 'Product Details' : undefined}
       backTo="/account/products"
       status={status}
-      statusOptions={['Draft', 'Confirmed', 'Archived']}
+      statusOptions={['Confirmed', 'Archived']}
       actions={
         <>
-          {!isEdit && <Button type="submit" form="product-form">Save</Button>}
-          {isEdit && status !== 'archived' && (
-            <Button type="submit" form="product-form">Save</Button>
+          <Button type="submit" form="product-form" loading={isCreating || isUpdating}>Save</Button>
+          {status === 'archived' ? (
+            <Button variant="default" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Restore</Button>
+          ) : (
+            isEdit && <Button variant="secondary" onClick={handleArchive}>Archive</Button>
           )}
-          {isEdit && status === 'draft' && (
-            <Button variant="default" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
-          )}
-          {status !== 'archived' && isEdit && (
-            <Button variant="secondary" onClick={handleArchive}>Archive</Button>
-          )}
-          {/* Restore option could be added here for archived products */}
         </>
       }
     >

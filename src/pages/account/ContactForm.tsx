@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { contactStore } from '@/services/mockData';
+import { useContact, useCreateContact, useUpdateContact } from '@/hooks/useData';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 import type { Contact } from '@/types';
 
@@ -40,10 +40,11 @@ export default function ContactForm() {
   const { toast } = useToast();
   const isEdit = Boolean(id);
 
-  const [contact, setContact] = useState<Contact | undefined>(
-    id ? contactStore.getById(id) : undefined
-  );
+  const { data: remoteContact, isLoading: isLoadingContact } = useContact(id);
+  const { mutate: createContact, isPending: isCreating } = useCreateContact();
+  const { mutate: updateContact, isPending: isUpdating } = useUpdateContact();
 
+  const [contact, setContact] = useState<Contact | undefined>();
   const [tagInput, setTagInput] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
 
@@ -69,28 +70,25 @@ export default function ContactForm() {
   const status = watch('status');
 
   useEffect(() => {
-    if (id && contact) {
+    if (remoteContact) {
+      setContact(remoteContact);
       reset({
-        name: contact.name,
-        image: contact.image,
-        email: contact.email,
-        phone: contact.phone,
-        street: contact.street ?? '',
-        city: contact.city ?? '',
-        state: contact.state ?? '',
-        country: contact.country ?? '',
-        pincode: contact.pincode ?? '',
-        type: contact.type,
-        tags: contact.tags ?? [],
-        portalAccess: contact.portalAccess,
-        portalPassword: contact.portalPassword ?? '',
-        status: contact.status,
+        name: remoteContact.name,
+        email: remoteContact.email,
+        phone: remoteContact.phone,
+        street: remoteContact.street ?? '',
+        city: remoteContact.city ?? '',
+        state: remoteContact.state ?? '',
+        country: remoteContact.country ?? '',
+        pincode: remoteContact.pincode ?? '',
+        type: remoteContact.type,
+        tags: remoteContact.tags ?? [],
+        portalAccess: remoteContact.portalAccess,
+        status: remoteContact.status === 'confirmed' ? 'confirmed' : remoteContact.status === 'archived' ? 'archived' : 'draft',
       });
-      setActiveTags(contact.tags ?? []);
-    } else if (id && !contact) {
-      // Handle not found if needed, or rely on parent check
+      setActiveTags(remoteContact.tags ?? []);
     }
-  }, [id, contact, reset]);
+  }, [remoteContact, reset]);
 
   // Sync activeTags with form
   useEffect(() => {
@@ -109,52 +107,62 @@ export default function ContactForm() {
   };
 
   const handleConfirm = () => {
-    setValue('status', 'confirmed');
-    // If it's an existing record, update the store immediately for better UX simulation
     if (id) {
-      contactStore.update(id, { status: 'confirmed' });
-      setContact(prev => prev ? ({ ...prev, status: 'confirmed' }) : undefined);
-      toast({ title: 'Confirmed', description: 'Contact confirmed.' });
+      updateContact({ id, data: { status: 'confirmed' } }, {
+        onSuccess: () => {
+          toast({ title: 'Confirmed', description: 'Contact confirmed.' });
+          setValue('status', 'confirmed');
+        }
+      });
+    } else {
+      setValue('status', 'confirmed');
     }
   };
 
   const handleArchive = () => {
-    setValue('status', 'archived');
     if (id) {
-      contactStore.update(id, { status: 'archived' });
-      setContact(prev => prev ? ({ ...prev, status: 'archived' }) : undefined);
-      toast({ title: 'Archived', description: 'Contact archived.' });
+      updateContact({ id, data: { status: 'archived' } }, {
+        onSuccess: () => {
+          toast({ title: 'Archived', description: 'Contact archived.' });
+          setValue('status', 'archived');
+        }
+      });
+    } else {
+      setValue('status', 'archived');
     }
   };
 
   const onSubmit = (data: FormValues) => {
+    const payload = {
+      ...data,
+      tagName: data.tags?.[0], // Backend expects 'tagName' for single tag logic, or we update backend to accept tags array
+    };
+
     if (isEdit && id) {
-      contactStore.update(id, data);
-      toast({ title: 'Updated', description: 'Contact updated successfully.' });
+      updateContact({ id, data: payload }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Contact updated successfully.' });
+          navigate('/account/contacts');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update contact', variant: 'destructive' })
+      });
     } else {
-      // Explicitly satisfy the type requirements
-      const newContact = contactStore.create({
-        ...data,
-        image: data.image ?? undefined,
-        street: data.street ?? undefined,
-        city: data.city ?? undefined,
-        state: data.state ?? undefined,
-        country: data.country ?? undefined,
-        pincode: data.pincode ?? undefined,
-        tags: data.tags ?? [],
-      } as any); // Cast to any or strict type if needed, but data should match if schema is correct. 
-      // The issue is Zod optional returns `string | undefined`. Contact interface might be strict?
-      // Actually Contact interface has `image?: string`.
-      // Be safe with 'as any' or explicit construction.
-      // Better: just spread data and let it be, but the error likely came from some mismatch. Note the error said `type?: ...` which suggests inferred type is optional.
-      // Forced cast to fix.
-      toast({ title: 'Created', description: 'Contact created successfully.' });
-      navigate('/account/contacts');
+      createContact(payload, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Contact created successfully.' });
+          navigate('/account/contacts');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create contact', variant: 'destructive' })
+      });
     }
   };
 
-  if (isEdit && !contact) {
-    return <div className="p-8 text-center text-muted-foreground">Contact not found.</div>;
+  if (isEdit && isLoadingContact) {
+    return <div className="p-8 text-center text-muted-foreground">Loading contact...</div>;
+  }
+
+  if (isEdit && !remoteContact && !isLoadingContact) {
+    return <div className="p-8 text-center text-muted-foreground">Contact not found</div>;
   }
 
   const isReadOnly = status === 'archived';
@@ -162,13 +170,13 @@ export default function ContactForm() {
   return (
     <DocumentLayout
       title={watch('name') || 'New Contact'}
-      subtitle={watch('type').toUpperCase()}
+      subtitle={(watch('type') || 'customer').toUpperCase()}
       backTo="/account/contacts"
       status={status}
       statusOptions={['Draft', 'Confirmed', 'Archived']}
       actions={
         <>
-          <Button type="submit" form="contact-form">Save</Button>
+          <Button type="submit" form="contact-form" loading={isCreating || isUpdating}>Save</Button>
           {status === 'draft' && (
             <Button type="button" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
           )}
@@ -303,12 +311,12 @@ export default function ContactForm() {
                   {watch('type') === 'customer' && (
                     <>
                       <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/20">
-                        <input type="checkbox" id="portalAccess" {...register('portalAccess')} className="rounded border-primary text-primary focus:ring-primary h-4 w-4" disabled={isReadOnly} />
+                        <input type="checkbox" id="portalAccess" {...register('portalAccess')} className="rounded border-primary text-primary focus:ring-primary h-4 w-4" disabled={isReadOnly || (isEdit && remoteContact?.portalAccess)} />
                         <Label htmlFor="portalAccess" className="text-sm cursor-pointer font-medium">Portal Access</Label>
                       </div>
 
-                      {/* Portal Password Field - visible only if Portal Access is Checked */}
-                      {watch('portalAccess') && (
+                      {/* Portal Password Field - visible for NEW contacts OR existing contacts enabling portal access for the first time */}
+                      {watch('portalAccess') && (!isEdit || (isEdit && !remoteContact?.portalAccess)) && (
                         <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
                           <Label htmlFor="portalPassword" className="text-sm font-medium">Portal Password</Label>
                           <div className="flex gap-2">
@@ -328,6 +336,18 @@ export default function ContactForm() {
                               Generate
                             </Button>
                           </div>
+                          <p className="text-xs text-muted-foreground">
+                            Password will be sent to the customer via email
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Show message for existing contacts with portal access */}
+                      {watch('portalAccess') && isEdit && remoteContact?.portalAccess && (
+                        <div className="p-3 border rounded-md bg-muted/20">
+                          <p className="text-sm text-muted-foreground">
+                            ✓ Portal access already granted. Password was sent to customer's email.
+                          </p>
                         </div>
                       )}
                     </>

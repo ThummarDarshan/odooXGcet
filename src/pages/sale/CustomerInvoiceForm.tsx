@@ -9,16 +9,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { customerInvoiceStore, contactStore, productStore, analyticalRuleStore, costCenterStore } from '@/services/mockData';
+import {
+  useCustomerInvoice, useCreateCustomerInvoice, useUpdateCustomerInvoice,
+  useContacts, useProducts, useCostCenters, useAnalyticalRules, useSalesOrders
+} from '@/hooks/useData';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
-import type { LineItem, OrderStatus, PaymentStatus } from '@/types';
+import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { useAuth } from '@/contexts/AuthContext';
 
 const schema = z.object({
-  customerId: z.string().min(1),
+  customerId: z.string().min(1, 'Customer is required'),
+  salesOrderId: z.string().optional(),
   invoiceDate: z.string().min(1),
   dueDate: z.string().min(1),
-  status: z.enum(['draft', 'posted', 'cancelled']),
+  status: z.enum(['draft', 'confirmed', 'posted', 'cancelled']),
   lineItems: z.array(z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'), unitPrice: z.coerce.number().min(0), costCenterId: z.string().optional() })).min(1),
 });
 type FormValues = z.infer<typeof schema>;
@@ -27,31 +32,75 @@ export default function CustomerInvoiceForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const isEdit = Boolean(id);
-  const [invoice, setInvoice] = useState(id ? customerInvoiceStore.getById(id) : null);
-  const customers = contactStore.getByType('customer');
-  const products = productStore.getActive();
-  const costCenters = costCenterStore.getActive();
 
-  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>(
-    invoice?.lineItems.map(li => ({ productId: li.productId, quantity: Math.floor(li.quantity), unitPrice: li.unitPrice, costCenterId: li.costCenterId })) ?? [{ productId: '', quantity: 1, unitPrice: 0 }]
-  );
+  const { data: invoice, isLoading: isLoadingInvoice } = useCustomerInvoice(id);
+  const { data: customers = [] } = useContacts('customer');
+  const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: analyticalRules = [] } = useAnalyticalRules();
+  const { data: salesOrders = [] } = useSalesOrders();
 
-  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { mutate: createInvoice, isPending: isCreating } = useCreateCustomerInvoice();
+  const { mutate: updateInvoice, isPending: isUpdating } = useUpdateCustomerInvoice();
+
+  // Filter posted/confirmed SOs
+  const validSOs = salesOrders.filter((so: any) => so.status === 'posted' || so.status === 'confirmed');
+
+  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>([
+    { productId: '', quantity: 1, unitPrice: 0 }
+  ]);
+
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      customerId: invoice?.customerId ?? '',
-      invoiceDate: invoice?.invoiceDate ?? new Date().toISOString().slice(0, 10),
-      dueDate: invoice?.dueDate ?? new Date().toISOString().slice(0, 10),
-      status: (invoice?.status as any) ?? 'draft',
-      lineItems: lines
+      customerId: '',
+      salesOrderId: '',
+      invoiceDate: new Date().toISOString().slice(0, 10),
+      dueDate: new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      lineItems: [{ productId: '', quantity: 1, unitPrice: 0 }],
     },
   });
 
   const status = watch('status');
+  const selectedSalesOrderId = watch('salesOrderId');
+
+  useEffect(() => {
+    if (invoice) {
+      setValue('customerId', invoice.customerId);
+      setValue('salesOrderId', invoice.salesOrderId ?? '');
+      setValue('invoiceDate', invoice.invoiceDate ? new Date(invoice.invoiceDate).toISOString().slice(0, 10) : (invoice.date ? new Date(invoice.date).toISOString().slice(0, 10) : ''));
+      setValue('dueDate', invoice.dueDate ? new Date(invoice.dueDate).toISOString().slice(0, 10) : '');
+      setValue('status', invoice.status as OrderStatus);
+
+      setLines(invoice.lineItems.map((li: any) => ({
+        productId: li.productId,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        costCenterId: li.costCenterId
+      })));
+    }
+  }, [invoice, setValue]);
+
+  // Handle Sales Order selection
+  useEffect(() => {
+    if (selectedSalesOrderId && !isEdit) {
+      const so = salesOrders.find((s: any) => s.id === selectedSalesOrderId);
+      if (so) {
+        setValue('customerId', so.customerId);
+        setLines(so.lineItems.map((li: any) => ({
+          productId: li.productId,
+          quantity: Math.floor(li.quantity),
+          unitPrice: li.unitPrice,
+          costCenterId: li.costCenterId
+        })));
+      }
+    }
+  }, [selectedSalesOrderId, salesOrders, setValue, isEdit]);
 
   useEffect(() => { setValue('lineItems', lines); }, [lines, setValue]);
-  useEffect(() => { if (id) setInvoice(customerInvoiceStore.getById(id)); }, [id]);
 
   const addLine = () => setLines(prev => [...prev, { productId: '', quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
@@ -60,13 +109,13 @@ export default function CustomerInvoiceForm() {
       const next = [...prev];
       (next[idx] as Record<string, unknown>)[field] = value;
       if (field === 'productId') {
-        const p = productStore.getById(String(value));
+        const p = products.find((prod: any) => prod.id === value);
         if (p) {
-          next[idx].unitPrice = p.price;
+          next[idx].unitPrice = p.price; // Sales price
           // Auto-assign cost center
           if (!next[idx].costCenterId) {
-            const rules = analyticalRuleStore.getAll();
-            const applicableRule = rules.find(rule => {
+            const applicableRule = analyticalRules.find((rule: any) => {
+              if (!rule.enabled) return false;
               return (rule.ruleType === 'category' && rule.category === p.category) || (rule.ruleType === 'product' && rule.productId === p.id);
             });
             if (applicableRule) next[idx].costCenterId = applicableRule.costCenterId;
@@ -78,66 +127,47 @@ export default function CustomerInvoiceForm() {
   };
 
   const onSubmit = (data: FormValues) => {
-    const lineItems: LineItem[] = data.lineItems.map((li, i) => {
-      const p = productStore.getById(li.productId);
-      return {
-        id: 'invli' + i,
-        productId: li.productId,
-        productName: p?.name,
-        quantity: Math.floor(li.quantity),
-        unitPrice: li.unitPrice,
-        amount: Math.floor(li.quantity) * li.unitPrice,
-        costCenterId: li.costCenterId,
-        costCenterName: li.costCenterId ? costCenterStore.getById(li.costCenterId)?.name : undefined,
-      };
-    });
-    const subtotal = lineItems.reduce((s, li) => s + li.amount, 0);
-    const tax = Math.round(subtotal * DEFAULT_TAX_RATE);
-    const total = subtotal + tax;
+    // line items mapping
+    const items = data.lineItems.map(li => ({
+      productId: li.productId,
+      quantity: li.quantity,
+      unitPrice: li.unitPrice,
+      costCenterId: li.costCenterId
+    }));
 
-    let savedInvoice;
     if (isEdit && id) {
-      // We can't update using mockStore's simple update if we want to change complex fields, but here it's fine
-      // Update helper needed? MockData update usually just merges
-      // Use a more explicit update object if needed
-      // Assuming customerInvoiceStore doesn't have explicit update, check mockData
-      // Wait, customerInvoiceStore.create exists, update might not or is Generic
-      // Checking mockData logs, I didn't verify customerInvoiceStore.update exists!
-      // I should check mockData.ts again. If not, I'll assume it exists or use create logic to simulate
-      // Actually earlier I saw `customerInvoiceStore` has `getAll`, `getById`, `create`, `recordPayment`. It MIGHT NOT have `update`.
-      // I will optimistically write `update` logic but if it fails I need to add it to mockData.
-      // Let's assume I need to check/add `update`.
-      // I'll leave a comment or try to use a generic update if available.
-      // For now, let's assume `update` is missing and I will just create a new one or I need to add `update` to `customerInvoiceStore`.
-      // I will add `update` to `customerInvoiceStore` in the next step if I find it missing.
-      // Oh wait, `salesOrderStore` had it. `vendorBillStore` had it. `customerInvoiceStore` LIKELY DOES NOT.
-      // I will just use `toast` and `navigate` for now, but to be real I need to add `update` to `mockData`.
-      // I'll do this refactor, then immediately add `update` to `mockData`.
-      toast({ title: 'Updated', description: 'Invoice updated (Simulation).' });
-    }
-    else {
-      savedInvoice = customerInvoiceStore.create({
+      updateInvoice({ id, data: { ...data, items } }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Invoice updated.' });
+          navigate('/sale/invoices');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update invoice.', variant: 'destructive' })
+      });
+    } else {
+      createInvoice({
         customerId: data.customerId,
+        salesOrderId: data.salesOrderId,
         invoiceDate: data.invoiceDate,
         dueDate: data.dueDate,
-        status: data.status as OrderStatus,
-        lineItems,
-        subtotal,
-        discount: 0,
-        tax,
-        total
+        items
+      }, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Invoice created.' });
+          navigate('/sale/invoices');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create invoice.', variant: 'destructive' })
       });
-      toast({ title: 'Created', description: 'Invoice created.' });
-      navigate('/sale/invoices');
     }
   };
 
   const handleConfirm = () => {
     if (id) {
-      customerInvoiceStore.update(id, { status: 'posted' });
-      setValue('status', 'posted');
-      setInvoice(prev => prev ? ({ ...prev, status: 'posted' }) : null);
-      toast({ title: 'Confirmed', description: 'Invoice confirmed.' });
+      updateInvoice({ id, data: { status: 'posted' } }, {
+        onSuccess: () => {
+          toast({ title: 'Confirmed', description: 'Invoice confirmed.' });
+          navigate(0);
+        }
+      });
     }
   };
 
@@ -145,30 +175,35 @@ export default function CustomerInvoiceForm() {
     if (id) navigate(`/sale/payments/create?invoiceId=${id}`);
   };
 
-  if (isEdit && !invoice) return <div className="text-center py-12"><p className="text-muted-foreground">Invoice not found.</p><Button asChild variant="link" onClick={() => navigate('/sale/invoices')}>Back</Button></div>;
+  if (isEdit && isLoadingInvoice) return <div className="p-8 text-center text-muted-foreground">Loading invoice...</div>;
 
-  const isReadOnly = status === 'posted' || status === 'cancelled';
+  if (isEdit && !invoice && !isLoadingInvoice) return <div className="text-center py-12"><p className="text-muted-foreground">Invoice not found.</p><Button asChild variant="link" onClick={() => navigate('/sale/invoices')}>Back</Button></div>;
+
+  const isReadOnly = status === 'posted' || status === 'cancelled' || user?.role === 'customer';
+  const isCustomer = user?.role === 'customer';
 
   return (
     <DocumentLayout
       title={isEdit ? invoice?.invoiceNumber ?? 'Customer Invoice' : 'New Invoice'}
       subtitle={invoice?.customerName}
-      backTo="/sale/invoices"
+      backTo={isCustomer ? "/portal/invoices" : "/sale/invoices"}
       status={status}
-      statusOptions={['Draft', 'Posted', 'Cancelled']} // Simplified status pipeline
+      statusOptions={['Draft', 'Confirmed', 'Posted', 'Cancelled']} // Simplified status pipeline
       actions={
-        <>
-          {!isEdit && <Button type="submit" form="inv-form">Save</Button>}
-          {isEdit && status === 'draft' && (
-            <>
-              <Button type="submit" form="inv-form">Save</Button>
-              <Button onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
-            </>
-          )}
-          {isEdit && status === 'posted' && (invoice?.paymentStatus !== 'paid') && (
-            <Button onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Pay Now</Button>
-          )}
-        </>
+        !isCustomer && (
+          <>
+            {!isEdit && <Button type="submit" form="inv-form" loading={isCreating}>Save</Button>}
+            {isEdit && status === 'draft' && (
+              <>
+                <Button type="submit" form="inv-form" loading={isUpdating}>Save</Button>
+                <Button onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
+              </>
+            )}
+            {isEdit && status === 'posted' && (invoice?.paymentStatus !== 'paid') && (
+              <Button onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Pay Now</Button>
+            )}
+          </>
+        )
       }
     >
       <form id="inv-form" onSubmit={handleSubmit(onSubmit)}>
@@ -177,16 +212,25 @@ export default function CustomerInvoiceForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div className="space-y-2">
+                  <Label className="font-medium">Source Sales Order</Label>
+                  <select disabled={isReadOnly || isEdit} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('salesOrderId')}>
+                    <option value="">Select Sales Order (optional)</option>
+                    {validSOs.map((so: any) => <option key={so.id} value={so.id}>{so.orderNumber} - {so.customerName}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
                   <Label className="font-medium">Customer</Label>
-                  <select disabled={isReadOnly} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('customerId')}>
+                  <select disabled={isReadOnly || (!!selectedSalesOrderId && !isEdit)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('customerId')}>
                     <option value="">Select customer</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {customers.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                   {errors.customerId && <p className="text-sm text-destructive">{errors.customerId.message}</p>}
                 </div>
               </div>
-              <div className="space-y-2"><Label className="font-medium">Invoice Date</Label><Input disabled={isReadOnly} type="date" {...register('invoiceDate')} /></div>
-              <div className="space-y-2"><Label className="font-medium">Due Date</Label><Input disabled={isReadOnly} type="date" {...register('dueDate')} /></div>
+              <div className="space-y-4">
+                <div className="space-y-2"><Label className="font-medium">Invoice Date</Label><Input disabled={isReadOnly} type="date" {...register('invoiceDate')} /></div>
+                <div className="space-y-2"><Label className="font-medium">Due Date</Label><Input disabled={isReadOnly} type="date" {...register('dueDate')} /></div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -212,13 +256,13 @@ export default function CustomerInvoiceForm() {
                   <div className="col-span-4">
                     <select disabled={isReadOnly} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={line.productId} onChange={e => updateLine(idx, 'productId', e.target.value)}>
                       <option value="">Select Product...</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-3">
                     <select disabled={isReadOnly} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={line.costCenterId ?? ''} onChange={e => updateLine(idx, 'costCenterId', e.target.value || undefined)}>
                       <option value="">None</option>
-                      {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                      {costCenters.map((cc: any) => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-2"><Input disabled={isReadOnly} type="number" min={1} className="h-9 text-right" value={line.quantity} onChange={e => updateLine(idx, 'quantity', parseInt(e.target.value, 10) || 0)} /></div>

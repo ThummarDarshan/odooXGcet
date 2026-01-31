@@ -1,0 +1,352 @@
+{
+    "info": {
+        "_postman_id": "shiv-furniture-v2",
+        "name": "Shiv Furniture Backend V2 (Features Update)",
+        "description": "API Collection including Auto Analytical Rules, Portal Access, and Price Updates",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Auth",
+            "item": [
+                {
+                    "name": "Login (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.success) {",
+                                    "        pm.environment.set(\"token\", jsonData.data.token);",
+                                    "        console.log(\"Token set successfully\");",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"admin@shivfurniture.com\",\n    \"password\": \"Admin123!\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/login",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "login"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Products",
+            "item": [
+                {
+                    "name": "Create Product (New Prices)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.environment.set(\"product_id\", jsonData.id);",
+                                    "    pm.environment.set(\"product_category\", jsonData.category);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Ergonomic Office Chair\",\n    \"category\": \"Office\",\n    \"sellPrice\": 15000,\n    \"purchasePrice\": 10000,\n    \"description\": \"High quality office chair\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Analytical Rules",
+            "item": [
+                {
+                    "name": "Create Auto Rule (Category based)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Office Supplies Rule\",\n    \"product_category\": \"Office\",\n    \"analytical_account_id\": \"{{cost_center_id}}\",\n    \"priority\": 10\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/analytical/rules",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "analytical",
+                                "rules"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "List Rules",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/analytical/rules",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "analytical",
+                                "rules"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Cost Centers",
+            "item": [
+                {
+                    "name": "Create Cost Center",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.environment.set(\"cost_center_id\", jsonData.id);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Admin Department\",\n    \"code\": \"CC-001\",\n    \"description\": \"General Administration\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/cost-centers",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "cost-centers"
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Customer Portal & Testing",
+            "item": [
+                {
+                    "name": "Create Customer (With Portal Access)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    pm.environment.set(\"customer_id\", jsonData.id);",
+                                    "    pm.environment.set(\"customer_email\", jsonData.email);",
+                                    "    console.log(\"Check backend logs for temp password!\");",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"type\": \"customer\",\n    \"name\": \"Test Customer\",\n    \"email\": \"testcustomer{{$randomInt}}@example.com\",\n    \"phone\": \"9876543210\",\n    \"address\": \"123 Test St\",\n    \"portalAccess\": true\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/contacts",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "contacts"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Invoice (Auto Analytical Check)",
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"customer_id\": \"{{customer_id}}\",\n    \"invoice_date\": \"2026-02-01\",\n    \"due_date\": \"2026-02-15\",\n    \"items\": [\n        {\n            \"product_id\": \"{{product_id}}\",\n            \"quantity\": 1,\n            \"unit_price\": 15000\n        }\n    ],\n    \"notes\": \"Testing Auto Cost Center\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/customer-invoices",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customer-invoices"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:5000/api",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "cost_center_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "product_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "customer_id",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

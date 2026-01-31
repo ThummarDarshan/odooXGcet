@@ -5,15 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { billPaymentStore } from '@/services/mockData';
+import { usePayments } from '@/hooks/useData';
 import { PAYMENT_MODES } from '@/lib/constants';
 
 const modeMap = Object.fromEntries(PAYMENT_MODES.map(m => [m.value, m.label]));
 
 export default function BillPayments() {
   const [search, setSearch] = useState('');
-  const all = billPaymentStore.getAll();
-  const filtered = all.filter(bp => !search || (bp.billNumber ?? '').toLowerCase().includes(search.toLowerCase()));
+  const { data: payments = [], isLoading } = usePayments({ type: 'OUTGOING' });
+
+  const filtered = payments.filter((bp: any) =>
+    !search || (bp.referenceId ?? '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -32,7 +35,7 @@ export default function BillPayments() {
           <CardDescription>All bill payments</CardDescription>
           <div className="relative max-w-sm pt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search by bill #..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder="Search by reference..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent>
@@ -47,15 +50,21 @@ export default function BillPayments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No payments.</TableCell></TableRow>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8">Loading...</TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No payments found.</TableCell></TableRow>
               ) : (
-                filtered.map(bp => (
+                filtered.map((bp: any) => (
                   <TableRow key={bp.id}>
-                    <TableCell className="font-medium">{bp.billNumber ?? bp.billId}</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">
+                      {/* We don't have bill number easily here unless we fetch or store it */}
+                      {/* Displaying '-' for now or allocation count */}
+                      -
+                    </TableCell>
                     <TableCell>Rs.{bp.amount.toLocaleString()}</TableCell>
                     <TableCell>{modeMap[bp.paymentMode] ?? bp.paymentMode}</TableCell>
-                    <TableCell>{bp.paymentDate}</TableCell>
+                    <TableCell>{new Date(bp.paymentDate).toLocaleDateString()}</TableCell>
                     <TableCell>{bp.referenceId ?? '-'}</TableCell>
                   </TableRow>
                 ))

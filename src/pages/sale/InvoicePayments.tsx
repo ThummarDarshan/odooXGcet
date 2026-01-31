@@ -5,15 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { invoicePaymentStore } from '@/services/mockData';
+import { usePayments } from '@/hooks/useData';
 import { PAYMENT_MODES } from '@/lib/constants';
 
 const modeMap = Object.fromEntries(PAYMENT_MODES.map(m => [m.value, m.label]));
 
 export default function InvoicePayments() {
   const [search, setSearch] = useState('');
-  const all = invoicePaymentStore.getAll();
-  const filtered = all.filter(ip => !search || (ip.invoiceNumber ?? '').toLowerCase().includes(search.toLowerCase()));
+  const { data: payments = [] } = usePayments({ type: 'INCOMING' });
+
+  const filtered = payments.filter((ip: any) =>
+    !search || (ip.invoiceNumber ?? '').toLowerCase().includes(search.toLowerCase()) || (ip.referenceId ?? '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -45,12 +48,12 @@ export default function InvoicePayments() {
               {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No payments.</TableCell></TableRow>
               ) : (
-                filtered.map(ip => (
+                filtered.map((ip: any) => (
                   <TableRow key={ip.id}>
-                    <TableCell className="font-medium">{ip.invoiceNumber ?? ip.invoiceId}</TableCell>
+                    <TableCell className="font-medium">{ip.invoiceNumber ?? '-'}</TableCell>
                     <TableCell>Rs.{ip.amount.toLocaleString()}</TableCell>
                     <TableCell>{modeMap[ip.paymentMode] ?? ip.paymentMode}</TableCell>
-                    <TableCell>{ip.paymentDate}</TableCell>
+                    <TableCell>{new Date(ip.paymentDate).toLocaleDateString()}</TableCell>
                     <TableCell>{ip.referenceId ?? '-'}</TableCell>
                   </TableRow>
                 ))

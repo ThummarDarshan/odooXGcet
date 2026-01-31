@@ -133,6 +133,7 @@ const App = () => (
             }>
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
               <Route path="/portal/invoices" element={<PortalInvoices />} />
+              <Route path="/portal/invoices/:id" element={<CustomerInvoiceForm />} />
               <Route path="/portal/pay" element={<PortalPay />} />
             </Route>
 

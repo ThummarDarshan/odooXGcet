@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Razorpay Test</title>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .section { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
+        input { display: block; width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #logs { background: #f4f4f4; padding: 10px; height: 200px; overflow-y: scroll; border: 1px solid #ddd; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>Shiv Furniture Payment Test</h1>
+    
+    <div id="loginSection" class="section">
+        <h3>1. Login</h3>
+        <input type="email" id="email" placeholder="Email" value="admin@gmail.com">
+        <input type="password" id="password" placeholder="Password" value="Admin123!">
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="paymentSection" class="section hidden">
+        <h3>2. Make Payment</h3>
+        <p>Logged in as: <span id="userEmail"></span></p>
+        <input type="text" id="invoiceId" placeholder="Invoice ID (UUID)">
+        <input type="number" id="amount" placeholder="Amount" value="5000">
+        <button onclick="initiatePayment()">Pay with Razorpay</button>
+    </div>
+
+    <h3>Logs</h3>
+    <div id="logs"></div>
+
+    <script>
+        const API_URL = 'http://localhost:5000/api';
+        let token = localStorage.getItem('token');
+
+        function log(msg) {
+            const logs = document.getElementById('logs');
+            logs.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(msg);
+        }
+
+        if (token) {
+            showPaymentSection();
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                log('Logging in...');
+                const res = await axios.post(`${API_URL}/login`, { email, password });
+                if (res.data.success) {
+                    token = res.data.data.token;
+                    localStorage.setItem('token', token);
+                    log('Login successful');
+                    showPaymentSection();
+                }
+            } catch (err) {
+                log(`Login failed: ${err.response?.data?.error || err.message}`);
+            }
+        }
+
+        function showPaymentSection() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('paymentSection').classList.remove('hidden');
+            document.getElementById('userEmail').innerText = 'User'; 
+        }
+
+        async function initiatePayment() {
+            const invoice_id = document.getElementById('invoiceId').value;
+            const amount = document.getElementById('amount').value;
+
+            if (!invoice_id) {
+                log('Please enter Invoice ID');
+                return;
+            }
+
+            try {
+                // 1. Create Order
+                log('Creating Order...');
+                const orderRes = await axios.post(`${API_URL}/payments/create-order`, 
+                    { invoice_id, amount: Number(amount) },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+
+                const data = orderRes.data.data;
+                log(`Order Created: ${data.order_id}`);
+
+                // 2. Open Razorpay
+                const options = {
+                    "key": data.key_id, 
+                    "amount": data.amount * 100, 
+                    "currency": data.currency,
+                    "name": "Shiv Furniture",
+                    "description": "Invoice Payment",
+                    "order_id": data.order_id, 
+                    "handler": async function (response){
+                        log('Payment successful at Razorpay level. Verifying...');
+                        
+                        try {
+                            const verifyRes = await axios.post(`${API_URL}/payments/verify`, {
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_signature: response.razorpay_signature,
+                                invoice_id: invoice_id,
+                                amount: Number(amount)
+                            }, { headers: { Authorization: `Bearer ${token}` } });
+
+                            log(`Backend Verification Success: ${JSON.stringify(verifyRes.data)}`);
+                            alert('Payment Verified and Recorded Successfully!');
+                        } catch (err) {
+                            log(`Verification Failed: ${err.response?.data?.error || err.message}`);
+                            alert('Verification Failed! Check logs.');
+                        }
+                    },
+                    "prefill": {
+                        "name": data.customer_name,
+                        "email": data.customer_email,
+                        "contact": data.customer_phone
+                    },
+                    "theme": {
+                        "color": "#3399cc"
+                    }
+                };
+                
+                const rzp1 = new Razorpay(options);
+                rzp1.on('payment.failed', function (response){
+                    log(`Payment Failed: ${response.error.description}`);
+                    alert("Payment Failed");
+                });
+                rzp1.open();
+
+            } catch (err) {
+                log(`Error: ${err.response?.data?.error || err.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

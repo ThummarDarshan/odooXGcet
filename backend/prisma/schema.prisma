@@ -1,0 +1,524 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+}
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+enum ContactStatus {
+  DRAFT
+  CONFIRMED
+  ARCHIVED
+}
+
+enum BudgetStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  REVISED
+}
+
+enum JournalEntryType {
+  PURCHASE
+  SALE
+  PAYMENT
+  ADJUSTMENT
+}
+
+enum JournalEntryReferenceType {
+  VENDOR_BILL
+  CUSTOMER_INVOICE
+  PAYMENT
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+enum VendorBillStatus {
+  DRAFT
+  POSTED
+  PAID
+  PARTIALLY_PAID
+  CANCELLED
+}
+
+enum CustomerInvoiceStatus {
+  DRAFT
+  POSTED
+  PAID
+  PARTIALLY_PAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  NOT_PAID
+  PARTIALLY_PAID
+  PAID
+}
+
+enum PaymentType {
+  INCOMING
+  OUTGOING
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  ONLINE
+  RAZORPAY
+}
+
+enum PaymentResultStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum InvoiceType {
+  CUSTOMER_INVOICE
+  VENDOR_BILL
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password_hash String
+  name          String
+  role          UserRole
+  is_active     Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  must_change_password Boolean @default(false)
+
+  contacts_created Contact[] @relation("ContactCreatedBy")
+  products_created Product[] @relation("ProductCreatedBy")
+  accounts_created AnalyticalAccount[] @relation("AccountCreatedBy")
+  budgets_created  Budget[] @relation("BudgetCreatedBy")
+  entries_created  JournalEntry[] @relation("EntryCreatedBy")
+  invoices_created CustomerInvoice[] @relation("InvoiceCreatedBy")
+  payments_created Payment[] @relation("PaymentCreatedBy")
+  
+  pos_created PurchaseOrder[] @relation("POCreatedBy")
+  sos_created SalesOrder[] @relation("SOCreatedBy")
+  bills_created VendorBill[] @relation("BillCreatedBy")
+
+  contact_link     Contact? @relation("ContactUserLink")
+
+  @@map("users")
+}
+
+model Contact {
+  id          String      @id @default(uuid())
+  type        ContactType
+  name        String
+  email       String?
+  phone       String?
+  address     String?     // Legacy field, kept for backward compatibility
+  street      String?
+  city        String?
+  state       String?
+  country     String?
+  pincode     String?
+  tax_id      String?
+  user_id     String?     @unique
+  user        User?       @relation("ContactUserLink", fields: [user_id], references: [id])
+  is_active   Boolean     @default(true)
+  image_url   String?
+  created_by  String
+  creator     User        @relation("ContactCreatedBy", fields: [created_by], references: [id])
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  customer_invoices CustomerInvoice[]
+  payments          Payment[]
+  purchase_orders   PurchaseOrder[]
+  vendor_bills      VendorBill[]
+  sales_orders      SalesOrder[]
+
+  tag_id      String?
+  tag         Tag?        @relation(fields: [tag_id], references: [id])
+  
+  status      ContactStatus @default(DRAFT)
+  auto_rules  AutoAnalyticalRule[]
+
+  @@map("contacts")
+}
+
+model Tag {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  contacts   Contact[]
+  auto_rules AutoAnalyticalRule[]
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  @@map("tags")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  sku         String?  @unique
+  category    String?
+  sell_price  Decimal  @db.Decimal(15, 2)
+  purchase_price Decimal? @db.Decimal(15, 2)
+  image_url   String?
+  is_active   Boolean  @default(true)
+  created_by  String
+  creator     User     @relation("ProductCreatedBy", fields: [created_by], references: [id])
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  po_items    PurchaseOrderItem[]
+  so_items    SalesOrderItem[]
+  bill_items  VendorBillItem[]
+
+  inv_items   CustomerInvoiceItem[]
+  
+  auto_rules  AutoAnalyticalRule[]
+
+  @@map("products")
+}
+
+
+model AnalyticalAccount {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  parent_id   String?
+  parent      AnalyticalAccount? @relation("ParentChild", fields: [parent_id], references: [id])
+  children    AnalyticalAccount[] @relation("ParentChild")
+  is_active   Boolean  @default(true)
+  created_by  String
+  creator     User     @relation("AccountCreatedBy", fields: [created_by], references: [id])
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  budgets        Budget[]
+  journal_entries JournalEntry[]
+  
+  po_items    PurchaseOrderItem[]
+  so_items    SalesOrderItem[]
+  bill_items  VendorBillItem[]
+  inv_items   CustomerInvoiceItem[]
+
+  @@map("analytical_accounts")
+
+  auto_rules  AutoAnalyticalRule[]
+}
+
+model AutoAnalyticalRule {
+  id                    String            @id @default(uuid())
+  name                  String
+  analytical_account_id String
+  analytical_account    AnalyticalAccount @relation(fields: [analytical_account_id], references: [id])
+  
+  product_id            String?
+  product               Product?          @relation(fields: [product_id], references: [id])
+  
+  product_category      String?
+  
+  contact_id            String?
+  contact               Contact?          @relation(fields: [contact_id], references: [id])
+  
+  contact_tag_id        String?
+  contact_tag           Tag?              @relation(fields: [contact_tag_id], references: [id])
+
+  priority              Int               @default(0) // Higher number = higher priority
+  is_active             Boolean           @default(true)
+  created_at            DateTime          @default(now())
+  updated_at            DateTime          @updatedAt
+
+  @@map("auto_analytical_rules")
+}
+
+enum BudgetType {
+  INCOME
+  EXPENSE
+}
+
+enum BudgetStatus {
+  DRAFT
+  CONFIRMED
+  REVISION
+  ARCHIVED
+}
+
+model Budget {
+  id                  String       @id @default(uuid())
+  name                String
+  analytical_account_id String
+  analytical_account  AnalyticalAccount @relation(fields: [analytical_account_id], references: [id])
+  type                BudgetType   @default(EXPENSE)
+  start_date          DateTime     @db.Date
+  end_date            DateTime     @db.Date
+  budgeted_amount     Decimal      @db.Decimal(15, 2)
+  description         String?
+  status              BudgetStatus @default(DRAFT)
+  revision_number     Int          @default(0)
+  parent_budget_id    String?
+  parent_budget       Budget?      @relation("BudgetHistory", fields: [parent_budget_id], references: [id])
+  revisions           Budget[]     @relation("BudgetHistory")
+  created_by          String
+  creator             User         @relation("BudgetCreatedBy", fields: [created_by], references: [id])
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  @@map("budgets")
+}
+
+model JournalEntry {
+  id                  String             @id @default(uuid())
+  entry_number        String             @unique
+  entry_date          DateTime           @db.Date
+  entry_type          JournalEntryType
+  reference_type      JournalEntryReferenceType
+  reference_id        String?
+  analytical_account_id String?
+  analytical_account  AnalyticalAccount? @relation(fields: [analytical_account_id], references: [id])
+  debit_amount        Decimal            @default(0) @db.Decimal(15, 2)
+  credit_amount       Decimal            @default(0) @db.Decimal(15, 2)
+  description         String?
+  status              JournalEntryStatus @default(DRAFT)
+  created_by          String
+  creator             User               @relation("EntryCreatedBy", fields: [created_by], references: [id])
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @updatedAt
+
+  @@map("journal_entries")
+}
+
+model PurchaseOrder {
+  id              String              @id @default(uuid())
+  po_number       String              @unique
+  vendor_id       String
+  vendor          Contact             @relation(fields: [vendor_id], references: [id])
+  order_date      DateTime            @db.Date
+  expected_delivery_date DateTime?    @db.Date
+  status          PurchaseOrderStatus @default(DRAFT)
+  subtotal        Decimal             @db.Decimal(15, 2)
+  tax_amount      Decimal             @default(0) @db.Decimal(15, 2)
+  total_amount    Decimal             @db.Decimal(15, 2)
+  notes           String?
+  created_by      String
+  creator         User                @relation("POCreatedBy", fields: [created_by], references: [id])
+  created_at      DateTime            @default(now())
+  updated_at      DateTime            @updatedAt
+
+  items           PurchaseOrderItem[]
+  vendor_bills    VendorBill[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                    String            @id @default(uuid())
+  purchase_order_id     String
+  purchase_order        PurchaseOrder     @relation(fields: [purchase_order_id], references: [id], onDelete: Cascade)
+  product_id            String
+  product               Product           @relation(fields: [product_id], references: [id])
+  quantity              Decimal           @db.Decimal(15, 2)
+  unit_price            Decimal           @db.Decimal(15, 2)
+  tax_rate              Decimal           @default(0) @db.Decimal(5, 2)
+  tax_amount            Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount          Decimal           @db.Decimal(15, 2)
+  analytical_account_id String?
+  analytical_account    AnalyticalAccount? @relation(fields: [analytical_account_id], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+model VendorBill {
+  id                String            @id @default(uuid())
+  bill_number       String            @unique
+  vendor_id         String
+  vendor            Contact           @relation(fields: [vendor_id], references: [id])
+  purchase_order_id String?
+  purchase_order    PurchaseOrder?    @relation(fields: [purchase_order_id], references: [id])
+  bill_date         DateTime          @db.Date
+  due_date          DateTime          @db.Date
+  status            VendorBillStatus  @default(DRAFT)
+  payment_status    PaymentStatus     @default(NOT_PAID)
+  subtotal          Decimal           @db.Decimal(15, 2)
+  tax_amount        Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount      Decimal           @db.Decimal(15, 2)
+  paid_amount       Decimal           @default(0) @db.Decimal(15, 2)
+  remaining_amount  Decimal           @db.Decimal(15, 2)
+  notes             String?
+  created_by        String
+  creator           User              @relation("BillCreatedBy", fields: [created_by], references: [id])
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+
+  items             VendorBillItem[]
+
+  @@map("vendor_bills")
+}
+
+model VendorBillItem {
+  id                    String            @id @default(uuid())
+  vendor_bill_id        String
+  vendor_bill           VendorBill        @relation(fields: [vendor_bill_id], references: [id], onDelete: Cascade)
+  product_id            String
+  product               Product           @relation(fields: [product_id], references: [id])
+  quantity              Decimal           @db.Decimal(15, 2)
+  unit_price            Decimal           @db.Decimal(15, 2)
+  tax_rate              Decimal           @default(0) @db.Decimal(5, 2)
+  tax_amount            Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount          Decimal           @db.Decimal(15, 2)
+  analytical_account_id String?
+  analytical_account    AnalyticalAccount? @relation(fields: [analytical_account_id], references: [id])
+
+  @@map("vendor_bill_items")
+}
+
+model SalesOrder {
+  id              String            @id @default(uuid())
+  so_number       String            @unique
+  customer_id     String
+  customer        Contact           @relation(fields: [customer_id], references: [id])
+  order_date      DateTime          @db.Date
+  expected_delivery_date DateTime?  @db.Date
+  status          SalesOrderStatus  @default(DRAFT)
+  subtotal        Decimal           @db.Decimal(15, 2)
+  tax_amount      Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount    Decimal           @db.Decimal(15, 2)
+  notes           String?
+  created_by      String
+  creator         User              @relation("SOCreatedBy", fields: [created_by], references: [id])
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  items           SalesOrderItem[]
+  invoices        CustomerInvoice[]
+
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id                    String            @id @default(uuid())
+  sales_order_id        String
+  sales_order           SalesOrder        @relation(fields: [sales_order_id], references: [id], onDelete: Cascade)
+  product_id            String
+  product               Product           @relation(fields: [product_id], references: [id])
+  quantity              Decimal           @db.Decimal(15, 2)
+  unit_price            Decimal           @db.Decimal(15, 2)
+  tax_rate              Decimal           @default(0) @db.Decimal(5, 2)
+  tax_amount            Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount          Decimal           @db.Decimal(15, 2)
+  analytical_account_id String?
+  analytical_account    AnalyticalAccount? @relation(fields: [analytical_account_id], references: [id])
+
+  @@map("sales_order_items")
+}
+
+model CustomerInvoice {
+  id               String                 @id @default(uuid())
+  invoice_number   String                 @unique
+  customer_id      String
+  customer         Contact                @relation(fields: [customer_id], references: [id])
+  sales_order_id   String? 
+  sales_order      SalesOrder?            @relation(fields: [sales_order_id], references: [id])
+  invoice_date     DateTime               @db.Date
+  due_date         DateTime               @db.Date
+  status           CustomerInvoiceStatus  @default(DRAFT)
+  payment_status   PaymentStatus          @default(NOT_PAID)
+  subtotal         Decimal                @db.Decimal(15, 2)
+  tax_amount       Decimal                @default(0) @db.Decimal(15, 2)
+  total_amount     Decimal                @db.Decimal(15, 2)
+  paid_amount      Decimal                @default(0) @db.Decimal(15, 2)
+  remaining_amount Decimal                @db.Decimal(15, 2)
+  notes            String?
+  created_by       String
+  creator          User                   @relation("InvoiceCreatedBy", fields: [created_by], references: [id])
+  created_at       DateTime               @default(now())
+  updated_at       DateTime               @updatedAt
+
+  items            CustomerInvoiceItem[]
+
+  @@map("customer_invoices")
+}
+
+model CustomerInvoiceItem {
+  id                    String            @id @default(uuid())
+  customer_invoice_id   String
+  customer_invoice      CustomerInvoice   @relation(fields: [customer_invoice_id], references: [id], onDelete: Cascade)
+  product_id            String
+  product               Product           @relation(fields: [product_id], references: [id])
+  quantity              Decimal           @db.Decimal(15, 2)
+  unit_price            Decimal           @db.Decimal(15, 2)
+  tax_rate              Decimal           @default(0) @db.Decimal(5, 2)
+  tax_amount            Decimal           @default(0) @db.Decimal(15, 2)
+  total_amount          Decimal           @db.Decimal(15, 2)
+  analytical_account_id String?
+  analytical_account    AnalyticalAccount? @relation(fields: [analytical_account_id], references: [id])
+
+  @@map("customer_invoice_items")
+}
+
+model Payment {
+  id                  String        @id @default(uuid())
+  payment_number      String        @unique
+  payment_date        DateTime      @db.Date
+  payment_type        PaymentType
+  payment_method      PaymentMethod
+  amount              Decimal       @db.Decimal(15, 2)
+  contact_id          String
+  contact             Contact       @relation(fields: [contact_id], references: [id])
+  reference_number    String?
+  razorpay_payment_id String?
+  razorpay_order_id   String?
+  notes               String?
+  status              PaymentResultStatus @default(PENDING)
+  created_by          String
+  creator             User          @relation("PaymentCreatedBy", fields: [created_by], references: [id])
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
+
+  allocations         PaymentAllocation[]
+
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id               String      @id @default(uuid())
+  payment_id       String
+  payment          Payment     @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+  invoice_type     InvoiceType
+  invoice_id       String
+  allocated_amount Decimal     @db.Decimal(15, 2)
+  created_at       DateTime    @default(now())
+
+  @@map("payment_allocations")
+}

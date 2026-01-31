@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { invoicePaymentStore, customerInvoiceStore } from '@/services/mockData';
+import { useCustomerInvoices, useCreatePayment } from '@/hooks/useData';
 import { PAYMENT_MODES } from '@/lib/constants';
 import type { PaymentMode } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
@@ -30,9 +30,14 @@ export default function InvoicePaymentForm() {
   const preselectedInvoiceId = searchParams.get('invoiceId');
   const navigate = useNavigate();
   const { toast } = useToast();
-  const invoices = customerInvoiceStore.getAll().filter(inv => inv.paymentStatus !== 'paid');
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { data: allInvoices = [], isLoading } = useCustomerInvoices();
+  const { mutate: createPayment, isPending } = useCreatePayment();
+
+  // Filter for unpaid or partially paid
+  const invoices = allInvoices.filter((inv: any) => inv.paymentStatus !== 'PAID' && inv.status !== 'CANCELLED' && inv.status !== 'DRAFT');
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       invoiceId: preselectedInvoiceId ?? '',
@@ -47,42 +52,53 @@ export default function InvoicePaymentForm() {
   const selectedInvoiceId = watch('invoiceId');
 
   useEffect(() => {
-    if (preselectedInvoiceId) {
-      const inv = customerInvoiceStore.getById(preselectedInvoiceId);
+    if (preselectedInvoiceId && invoices.length > 0) {
+      const inv = invoices.find((i: any) => i.id === preselectedInvoiceId);
       if (inv) {
         setValue('invoiceId', preselectedInvoiceId);
         setValue('amount', inv.total - inv.paidAmount);
       }
     }
-  }, [preselectedInvoiceId, setValue]);
+  }, [preselectedInvoiceId, invoices, setValue]);
 
   useEffect(() => {
-    if (selectedInvoiceId && !preselectedInvoiceId) {
-      const inv = customerInvoiceStore.getById(selectedInvoiceId);
+    if (selectedInvoiceId && !preselectedInvoiceId && invoices.length > 0) {
+      const inv = invoices.find((i: any) => i.id === selectedInvoiceId);
       if (inv) setValue('amount', inv.total - inv.paidAmount);
     }
-  }, [selectedInvoiceId, preselectedInvoiceId, setValue]);
+  }, [selectedInvoiceId, preselectedInvoiceId, setValue, invoices]);
 
 
   const onSubmit = (data: FormValues) => {
-    invoicePaymentStore.create({
-      invoiceId: data.invoiceId,
+    const inv = invoices.find((i: any) => i.id === data.invoiceId);
+    if (!inv) return;
+
+    createPayment({
+      contactId: inv.customerId,
       amount: data.amount,
-      paymentMode: data.paymentMode,
-      paymentDate: data.paymentDate,
-      referenceId: data.referenceId,
-      notes: data.notes,
+      mode: data.paymentMode,
+      type: 'INCOMING',
+      date: data.paymentDate,
+      billId: data.invoiceId, // repurposed for generic invoiceId in hook
+      isBill: false,
+      reference: data.referenceId,
+      notes: data.notes
+    }, {
+      onSuccess: () => {
+        toast({ title: 'Payment recorded', description: 'Invoice payment has been recorded.' });
+        navigate(`/sale/invoices/${data.invoiceId}/edit`);
+      },
+      onError: () => toast({ title: 'Error', description: 'Failed to record payment.', variant: 'destructive' })
     });
-    toast({ title: 'Payment recorded', description: 'Invoice payment has been recorded.' });
-    // Navigate back to the invoice
-    navigate(`/sale/invoices/${data.invoiceId}`);
   };
+
+  if (isLoading) return <div className="p-8 text-center">Loading invoices...</div>;
 
   return (
     <DocumentLayout
       title="Register Payment"
-      backTo={preselectedInvoiceId ? `/sale/invoices/${preselectedInvoiceId}` : "/sale/payments"}
-      actions={<Button type="submit" form="pay-form">Validate & Pay</Button>}
+      backTo={preselectedInvoiceId ? `/sale/invoices/${preselectedInvoiceId}/edit` : "/sale/payments"}
+      actions={<Button type="submit" form="pay-form" loading={isPending}>Validate & Pay</Button>}
     >
       <form id="pay-form" onSubmit={handleSubmit(onSubmit)}>
         <Card>
@@ -93,7 +109,7 @@ export default function InvoicePaymentForm() {
                 <Label>Customer Invoice</Label>
                 <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" {...register('invoiceId')}>
                   <option value="">Select invoice</option>
-                  {invoices.map(inv => (
+                  {invoices.map((inv: any) => (
                     <option key={inv.id} value={inv.id}>{inv.invoiceNumber} - {inv.customerName} - Due: Rs.{(inv.total - inv.paidAmount).toLocaleString()}</option>
                   ))}
                 </select>

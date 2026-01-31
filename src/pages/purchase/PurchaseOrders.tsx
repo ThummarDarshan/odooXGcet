@@ -6,21 +6,27 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { purchaseOrderStore } from '@/services/mockData';
+import { usePurchaseOrders } from '@/hooks/useData';
 import { ORDER_STATUSES } from '@/lib/constants';
 
 const statusMap = Object.fromEntries(ORDER_STATUSES.map(s => [s.value, s]));
 
 export default function PurchaseOrders() {
   const navigate = useNavigate();
+  const { data: purchaseOrders, isLoading } = usePurchaseOrders();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const all = purchaseOrderStore.getAll();
+
+  const all = purchaseOrders || [];
   const filtered = all.filter(po => {
     const matchSearch = !search || po.orderNumber.toLowerCase().includes(search.toLowerCase()) || (po.vendorName ?? '').toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || po.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-muted-foreground">Loading purchase orders...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -77,7 +83,7 @@ export default function PurchaseOrders() {
                   >
                     <TableCell className="font-medium">{po.orderNumber}</TableCell>
                     <TableCell>{po.vendorName ?? po.vendorId}</TableCell>
-                    <TableCell>{po.orderDate}</TableCell>
+                    <TableCell>{new Date(po.orderDate).toLocaleDateString()}</TableCell>
                     <TableCell>{po.total.toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge variant={statusMap[po.status]?.color === 'destructive' ? 'destructive' : statusMap[po.status]?.color === 'success' ? 'default' : 'secondary'}>

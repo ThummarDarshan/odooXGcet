@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, Smartphone, Building2, Wallet, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { customerInvoiceStore, invoicePaymentStore } from '@/services/mockData';
+import { useCustomerInvoice, useCreatePayment } from '@/hooks/useData';
 import { useToast } from '@/hooks/use-toast';
 
 type Step = 'choose' | 'checkout' | 'success';
@@ -15,14 +15,18 @@ export default function PortalPay() {
   const [searchParams] = useSearchParams();
   const invoiceId = searchParams.get('invoiceId');
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>('choose');
   const [payType, setPayType] = useState<'full' | 'partial'>('full');
   const [partialAmount, setPartialAmount] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  const invoice = invoiceId ? customerInvoiceStore.getById(invoiceId) : null;
+  const { data: invoice, isLoading } = useCustomerInvoice(invoiceId ?? undefined);
+  const { mutate: createPayment, isPending: isProcessing } = useCreatePayment();
+
   const amountDue = invoice ? invoice.total - invoice.paidAmount : 0;
   const payAmount = payType === 'full' ? amountDue : Math.min(Number(partialAmount) || 0, amountDue);
+
+  if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
   if (!invoiceId || !invoice) {
     return (
@@ -54,29 +58,33 @@ export default function PortalPay() {
   };
 
   const handlePayNow = () => {
-    if (!invoiceId || payAmount <= 0) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      invoicePaymentStore.create({
-        invoiceId,
-        amount: payAmount,
-        paymentMode: 'UPI',
-        paymentDate: new Date().toISOString().slice(0, 10),
-        referenceId: 'RZP' + Date.now(),
-      });
-      setIsProcessing(false);
-      setStep('success');
-      toast({ title: 'Payment successful', description: 'Thanks for your payment.' });
-    }, 1500);
+    // Currently using manual payment creation as a simulation of Razorpay success
+    createPayment({
+      date: new Date().toISOString().slice(0, 10),
+      type: 'INCOMING',
+      mode: 'ONLINE',
+      amount: payAmount,
+      contactId: invoice.customerId,
+      reference: 'PORTAL-' + Date.now(),
+      notes: `Online payment for Invoice ${invoice.invoiceNumber}`,
+      billId: invoice.id,
+      isBill: false // It's a Customer Invoice
+    }, {
+      onSuccess: () => {
+        setStep('success');
+        toast({ title: 'Payment successful', description: 'Thanks for your payment.' });
+      },
+      onError: () => {
+        toast({ title: 'Payment failed', description: 'Could not process payment.', variant: 'destructive' });
+      }
+    });
   };
 
   if (step === 'choose') {
     return (
       <div className="max-w-md mx-auto space-y-6">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/portal/invoices" className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to My Invoices
-          </Link>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/portal/invoices')} className="flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" /> Back to My Invoices
         </Button>
         <Card>
           <CardHeader>
@@ -141,7 +149,7 @@ export default function PortalPay() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y">
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
+              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer" onClick={handlePayNow}>
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <Smartphone className="h-5 w-5 text-primary" />
                 </div>
@@ -149,9 +157,8 @@ export default function PortalPay() {
                   <p className="font-medium">UPI / QR</p>
                   <p className="text-xs text-muted-foreground">Google Pay, PhonePe, Paytm, and more</p>
                 </div>
-                <span className="text-xs text-muted-foreground">more</span>
               </div>
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
+              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer" onClick={handlePayNow}>
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
                   <CreditCard className="h-5 w-5 text-muted-foreground" />
                 </div>
@@ -159,47 +166,6 @@ export default function PortalPay() {
                   <p className="font-medium">Cards</p>
                   <p className="text-xs text-muted-foreground">Visa, Mastercard, RuPay — All Indian banks</p>
                 </div>
-                <span className="text-xs text-muted-foreground">more</span>
-              </div>
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                  <Building2 className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Net banking</p>
-                  <p className="text-xs text-muted-foreground">All Indian banks</p>
-                </div>
-                <span className="text-xs text-muted-foreground">more</span>
-              </div>
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                  <CreditCard className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">EMI</p>
-                  <p className="text-xs text-muted-foreground">Card, EarlySalary and more</p>
-                </div>
-                <span className="text-xs text-muted-foreground">more</span>
-              </div>
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                  <Wallet className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Pay Later</p>
-                  <p className="text-xs text-muted-foreground">LazyPay, ICICI, FlexiPay</p>
-                </div>
-                <span className="text-xs text-muted-foreground">more</span>
-              </div>
-              <div className="flex items-center gap-4 p-4 hover:bg-muted/30 cursor-pointer">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                  <Wallet className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium">Wallet</p>
-                  <p className="text-xs text-muted-foreground">PhonePe & More</p>
-                </div>
-                <span className="text-xs text-muted-foreground">more</span>
               </div>
             </div>
           </CardContent>
@@ -228,9 +194,8 @@ export default function PortalPay() {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-green-800 dark:text-green-200">Thanks for your payment</h2>
-          <p className="text-sm text-muted-foreground mt-1">A payment will appear on your statement</p>
+          <p className="text-sm text-muted-foreground mt-1">Payment processed successfully.</p>
           <p className="mt-4 text-2xl font-bold">₹{payAmount.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground mt-2">Powered by Razorpay</p>
           <Button className="mt-6" asChild>
             <Link to="/portal/invoices">Back to My Invoices</Link>
           </Button>

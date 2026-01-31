@@ -6,21 +6,28 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { salesOrderStore } from '@/services/mockData';
+import { useSalesOrders } from '@/hooks/useData';
 import { ORDER_STATUSES } from '@/lib/constants';
 
 const statusMap = Object.fromEntries(ORDER_STATUSES.map(s => [s.value, s]));
 
 export default function SalesOrders() {
   const navigate = useNavigate();
+  const { data: salesOrders, isLoading } = useSalesOrders();
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const all = salesOrderStore.getAll();
+
+  const all = salesOrders || [];
   const filtered = all.filter(so => {
     const okSearch = !search || (so.customerName ?? '').toLowerCase().includes(search.toLowerCase());
     const okStatus = statusFilter === 'all' || so.status === statusFilter;
     return okSearch && okStatus;
   });
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-muted-foreground">Loading sales orders...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -65,7 +72,7 @@ export default function SalesOrders() {
                   >
                     <TableCell className="font-medium">{so.orderNumber}</TableCell>
                     <TableCell>{so.customerName ?? so.customerId}</TableCell>
-                    <TableCell>{so.orderDate}</TableCell>
+                    <TableCell>{new Date(so.orderDate).toLocaleDateString()}</TableCell>
                     <TableCell>Rs.{so.total.toLocaleString()}</TableCell>
                     <TableCell><Badge variant="secondary">{so.status}</Badge></TableCell>
                   </TableRow>

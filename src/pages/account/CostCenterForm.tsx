@@ -3,17 +3,18 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { costCenterStore } from '@/services/mockData';
+import { useCostCenter, useCreateCostCenter, useUpdateCostCenter } from '@/hooks/useData';
+import type { CostCenter } from '@/types';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
-  description: z.string(),
+  code: z.string().min(1, 'Code is required'),
+  description: z.string().optional(),
   status: z.enum(['active', 'inactive']),
 });
 
@@ -24,29 +25,52 @@ export default function CostCenterForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isEdit = Boolean(id);
-  const costCenter = id ? costCenterStore.getById(id) : null;
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { data: remoteCostCenter, isLoading: isLoadingCostCenter } = useCostCenter(id);
+  const { mutate: createCostCenter, isPending: isCreating } = useCreateCostCenter();
+  const { mutate: updateCostCenter, isPending: isUpdating } = useUpdateCostCenter();
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', description: '', status: 'active' },
+    defaultValues: { name: '', code: '', description: '', status: 'active' },
   });
 
   useEffect(() => {
-    if (costCenter) reset({ name: costCenter.name, description: costCenter.description, status: costCenter.status });
-  }, [costCenter, reset]);
+    if (remoteCostCenter) {
+      reset({
+        name: remoteCostCenter.name,
+        code: remoteCostCenter.code || '',
+        description: remoteCostCenter.description || '',
+        status: remoteCostCenter.status as 'active' | 'inactive'
+      });
+    }
+  }, [remoteCostCenter, reset]);
 
   const onSubmit = (data: FormValues) => {
     if (isEdit && id) {
-      costCenterStore.update(id, data);
-      toast({ title: 'Updated', description: 'Cost center updated successfully.' });
+      updateCostCenter({ id, data }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Cost center updated successfully.' });
+          navigate('/account/cost-centers');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update cost center.', variant: 'destructive' })
+      });
     } else {
-      costCenterStore.create(data);
-      toast({ title: 'Created', description: 'Cost center created successfully.' });
+      createCostCenter(data, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Cost center created successfully.' });
+          navigate('/account/cost-centers');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create cost center.', variant: 'destructive' })
+      });
     }
-    navigate('/account/cost-centers');
   };
 
-  if (isEdit && !costCenter) {
+  if (isEdit && isLoadingCostCenter) {
+    return <div className="p-8 text-center text-muted-foreground">Loading cost center...</div>;
+  }
+
+  if (isEdit && !remoteCostCenter && !isLoadingCostCenter) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Cost center not found.</p>
@@ -63,16 +87,23 @@ export default function CostCenterForm() {
         <Card>
           <CardHeader>
             <CardTitle>Cost center details</CardTitle>
-            <CardDescription>Name, description, status</CardDescription>
+            <CardDescription>Name, code, description, status</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" {...register('name')} />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name</Label>
+                <Input id="name" {...register('name')} placeholder="e.g. Operations" />
+                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="code">Code</Label>
+                <Input id="code" {...register('code')} placeholder="e.g. OPR-001" />
+                {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">Description (Optional)</Label>
               <Input id="description" {...register('description')} />
             </div>
             <div className="space-y-2">
@@ -84,8 +115,7 @@ export default function CostCenterForm() {
             </div>
           </CardContent>
           <CardFooter className="flex gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" loading={isCreating || isUpdating}>
               {isEdit ? 'Update' : 'Create'}
             </Button>
             <Button type="button" variant="outline" asChild><Link to="/account/cost-centers">Cancel</Link></Button>

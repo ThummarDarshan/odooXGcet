@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { User, UserRole, AuthState } from '@/types';
 
+import api from '@/services/api';
+
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<User | null>;
   signup: (email: string, password: string, name: string) => Promise<boolean>;
@@ -9,26 +11,6 @@ interface AuthContextType extends AuthState {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-// Mock users for demo - In production, this would be replaced with API calls
-const MOCK_USERS: (User & { passwordHash: string })[] = [
-  {
-    id: '1',
-    email: 'admin@shivfurniture.com',
-    name: 'Admin User',
-    role: 'admin',
-    createdAt: '2024-01-01',
-    passwordHash: 'hashed_admin123', // In real app, never store passwords client-side
-  },
-  {
-    id: '2',
-    email: 'customer@example.com',
-    name: 'John Customer',
-    role: 'customer',
-    createdAt: '2024-01-15',
-    passwordHash: 'hashed_customer123',
-  },
-];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -39,17 +21,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check for existing session on mount
   useEffect(() => {
-    const storedUser = sessionStorage.getItem('auth_user');
-    if (storedUser) {
+    const storedUser = localStorage.getItem('user');
+    const token = localStorage.getItem('token');
+
+    if (storedUser && token) {
       try {
-        const user = JSON.parse(storedUser);
+        const backendUser = JSON.parse(storedUser);
+        // Normalize role to lowercase
+        const user = {
+          ...backendUser,
+          role: backendUser.role.toLowerCase() as UserRole
+        };
         setState({
           user,
           isAuthenticated: true,
           isLoading: false,
         });
       } catch {
-        sessionStorage.removeItem('auth_user');
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
         setState(prev => ({ ...prev, isLoading: false }));
       }
     } else {
@@ -58,74 +48,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string): Promise<User | null> => {
-    // SECURITY: In production, send credentials to backend for validation
-    // Backend handles password hashing/verification
-    // Never log or store passwords in frontend
-
     setState(prev => ({ ...prev, isLoading: true }));
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { token, user: backendUser } = response.data.data;
 
-    // Mock validation - In production, this is handled by backend
-    const mockUser = MOCK_USERS.find(u => u.email === email);
+      // Normalize role to lowercase for frontend
+      const user = {
+        ...backendUser,
+        role: backendUser.role.toLowerCase() as UserRole
+      };
 
-    if (mockUser) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { passwordHash, ...userWithoutPassword } = mockUser;
-
-      sessionStorage.setItem('auth_user', JSON.stringify(userWithoutPassword));
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
 
       setState({
-        user: userWithoutPassword,
+        user,
         isAuthenticated: true,
         isLoading: false,
       });
 
-      return userWithoutPassword;
+      return user;
+    } catch (error) {
+      setState(prev => ({ ...prev, isLoading: false }));
+      console.error('Login failed:', error);
+      return null;
     }
-
-    setState(prev => ({ ...prev, isLoading: false }));
-    return null;
   }, []);
 
   const signup = useCallback(async (email: string, password: string, name: string): Promise<boolean> => {
-    // SECURITY: In production, send to backend for:
-    // 1. Email validation
-    // 2. Password hashing (bcrypt)
-    // 3. User creation
-    // Never store password in frontend state after submit
-
     setState(prev => ({ ...prev, isLoading: true }));
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Check if user already exists
-    const existingUser = MOCK_USERS.find(u => u.email === email);
-    if (existingUser) {
+    try {
+      // Use signup endpoint
+      await api.post('/auth/signup', { email, password, name });
+      // After signup, user might need to login or auto-login. 
+      // For now, let's assume they need to login, or we auto-login.
+      // Let's just return true and let UI handle redirection to login.
+      setState(prev => ({ ...prev, isLoading: false }));
+      return true;
+    } catch (error) {
+      console.error('Signup failed:', error);
       setState(prev => ({ ...prev, isLoading: false }));
       return false;
     }
-
-    // Create new user (mock)
-    const newUser: User = {
-      id: crypto.randomUUID(),
-      email,
-      name,
-      role: 'customer', // Default role for signup
-      createdAt: new Date().toISOString(),
-    };
-
-    sessionStorage.setItem('auth_user', JSON.stringify(newUser));
-
-    setState({
-      user: newUser,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-
-    return true;
   }, []);
 
   const createUser = useCallback(async (
@@ -134,24 +101,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     name: string,
     role: UserRole
   ): Promise<boolean> => {
-    // SECURITY: Admin-only function
-    // In production, backend validates admin privileges before creating user
-
     if (state.user?.role !== 'admin') {
       return false;
     }
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // In production, this would be a backend API call
-    // Password is sent securely and hashed server-side
-
-    return true;
+    try {
+      await api.post('/auth/register', { email, password, name, role });
+      return true;
+    } catch (error) {
+      console.error('Create user failed:', error);
+      return false;
+    }
   }, [state.user]);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem('auth_user');
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('auth_user'); // Clean up old
     setState({
       user: null,
       isAuthenticated: false,

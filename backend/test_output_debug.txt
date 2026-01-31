@@ -1,0 +1,21 @@
+Testing email sending...
+User: dhruvinvaghasiya297@gmail.com
+Host: smtp.gmail.com
+Port: 587
+Secure: false
+[2026-01-31 17:12:56] DEBUG Creating transport: nodemailer (7.0.13; +https://nodemailer.com/; SMTP/7.0.13[client:7.0.13])
+[2026-01-31 17:12:56] DEBUG Sending mail using SMTP/7.0.13[client:7.0.13]
+[2026-01-31 17:12:56] DEBUG [Ze79KwH6VJE] Resolved smtp.gmail.com as 192.178.211.109 [cache miss]
+[2026-01-31 17:13:06] WARN  [Ze79KwH6VJE] Connection timeout
+[2026-01-31 17:13:06] DEBUG [Ze79KwH6VJE] Closing connection to the server using "destroy"
+[2026-01-31 17:13:06] ERROR Send Error: Connection timeout
+Error occurred while sending email:
+Error: Connection timeout
+    at SMTPConnection._formatError (F:\Project's\odooXGcet\backend\node_modules\nodemailer\lib\smtp-connection\index.js:814:19)
+    at SMTPConnection._onError (F:\Project's\odooXGcet\backend\node_modules\nodemailer\lib\smtp-connection\index.js:795:20)
+    at Timeout.<anonymous> (F:\Project's\odooXGcet\backend\node_modules\nodemailer\lib\smtp-connection\index.js:237:22)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7) {
+  code: 'ETIMEDOUT',
+  command: 'CONN'
+}

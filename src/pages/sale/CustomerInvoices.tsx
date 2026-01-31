@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Pencil, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { customerInvoiceStore } from '@/services/mockData';
+import { useCustomerInvoices } from '@/hooks/useData';
 import { PAYMENT_STATUSES } from '@/lib/constants';
 
 const payMap = Object.fromEntries(PAYMENT_STATUSES.map(s => [s.value, s]));
@@ -15,8 +15,10 @@ export default function CustomerInvoices() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [payFilter, setPayFilter] = useState<string>('all');
-  const all = customerInvoiceStore.getAll();
-  const filtered = all.filter(inv => {
+
+  const { data: invoices = [], isLoading } = useCustomerInvoices();
+
+  const filtered = invoices.filter(inv => {
     const okSearch = !search || (inv.customerName ?? '').toLowerCase().includes(search.toLowerCase());
     const okPay = payFilter === 'all' || inv.paymentStatus === payFilter;
     return okSearch && okPay;
@@ -26,7 +28,9 @@ export default function CustomerInvoices() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div><h1 className="text-2xl font-bold">Customer Invoices</h1><p className="text-muted-foreground">Invoices and payment status</p></div>
-
+        <Button asChild>
+          <Link to="/sale/invoices/create"><Plus className="h-4 w-4 mr-2" /> New Invoice</Link>
+        </Button>
       </div>
       <Card>
         <CardHeader>
@@ -55,18 +59,20 @@ export default function CustomerInvoices() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No invoices.</TableCell></TableRow>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No invoices found.</TableCell></TableRow>
               ) : (
                 filtered.map(inv => (
                   <TableRow
                     key={inv.id}
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/sale/invoices/${inv.id}`)}
+                    onClick={() => navigate(`/sale/invoices/${inv.id}/edit`)}
                   >
                     <TableCell className="font-medium">{inv.invoiceNumber}</TableCell>
                     <TableCell>{inv.customerName ?? inv.customerId}</TableCell>
-                    <TableCell>{inv.invoiceDate}</TableCell>
+                    <TableCell>{new Date(inv.date).toLocaleDateString()}</TableCell>
                     <TableCell>Rs.{inv.total.toLocaleString()}</TableCell>
                     <TableCell>Rs.{inv.paidAmount.toLocaleString()}</TableCell>
                     <TableCell><Badge variant={payMap[inv.paymentStatus]?.color === 'destructive' ? 'destructive' : 'secondary'}>{inv.paymentStatus.replace('_', ' ')}</Badge></TableCell>

@@ -15,28 +15,27 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { contactStore } from '@/services/mockData';
+import { useContacts, useArchiveContact } from '@/hooks/useData';
 import type { Contact, ContactType } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function Contacts() {
   const navigate = useNavigate();
+  const { data: contactsData, isLoading } = useContacts();
+  const { mutate: archiveContact, isPending: isArchiving } = useArchiveContact();
+
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ContactType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'archived'>('all');
   const [selected, setSelected] = useState<string[]>([]);
   const { toast } = useToast();
-  // Use local state to track data for reactivity
-  const [data, setData] = useState<Contact[]>(contactStore.getAll());
 
-  // Refresh data helper
-  const refreshData = () => {
-    setData([...contactStore.getAll()]);
-    setSelected([]); // Clear selection on refresh
-  };
+  const contacts = contactsData || [];
 
-  const filtered = data.filter(c => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase());
+  const filtered = contacts.filter(c => {
+    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || (c.email && c.email.toLowerCase().includes(search.toLowerCase()));
     const matchType = typeFilter === 'all' || c.type === typeFilter;
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchSearch && matchType && matchStatus;
@@ -59,16 +58,70 @@ export default function Contacts() {
   };
 
   const handleArchive = (id: string, name: string) => {
-    contactStore.archive(id);
-    toast({ title: 'Archived', description: `${name} has been archived.` });
-    refreshData();
+    archiveContact(id, {
+      onSuccess: () => {
+        toast({ title: 'Archived', description: `${name} has been archived.` });
+      }
+    });
   };
 
   const handleBulkArchive = () => {
-    selected.forEach(id => contactStore.archive(id));
+    selected.forEach(id => archiveContact(id));
     toast({ title: 'Bulk Archived', description: `${selected.length} contacts archived.` });
-    refreshData();
+    setSelected([]);
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[200px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[120px]" />
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-[150px]" />
+              <Skeleton className="h-4 w-[250px]" />
+            </div>
+            <div className="flex flex-wrap gap-4 pt-4">
+              <Skeleton className="h-10 flex-1 min-w-[200px]" />
+              <Skeleton className="h-10 w-[150px]" />
+              <Skeleton className="h-10 w-[150px]" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-4">
+                <Skeleton className="h-4 w-4" />
+                <Skeleton className="h-4 w-[50px] ml-4" />
+                <Skeleton className="h-4 w-[150px] ml-12" />
+                <Skeleton className="h-4 w-[200px]" />
+                <Skeleton className="h-4 w-[100px]" />
+                <Skeleton className="h-4 w-[80px]" />
+              </div>
+              {Array(5).fill(0).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4 py-2">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-9 w-9 rounded-full" />
+                  <Skeleton className="h-4 w-[150px]" />
+                  <Skeleton className="h-4 w-[200px]" />
+                  <Skeleton className="h-4 w-[100px]" />
+                  <Skeleton className="h-6 w-[80px] rounded-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -79,8 +132,8 @@ export default function Contacts() {
         </div>
         <div className="flex gap-2">
           {selected.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkArchive}>
-              <Trash2 className="h-4 w-4 mr-2" />
+            <Button variant="destructive" onClick={handleBulkArchive} loading={isArchiving}>
+              {!isArchiving && <Trash2 className="h-4 w-4 mr-2" />}
               Archive ({selected.length})
             </Button>
           )}

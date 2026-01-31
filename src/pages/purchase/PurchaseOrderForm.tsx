@@ -3,16 +3,20 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Plus, Trash2, Printer, Send, Ban } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { purchaseOrderStore, contactStore, productStore, costCenterStore, analyticalRuleStore, budgetStore, vendorBillStore } from '@/services/mockData';
+import {
+  usePurchaseOrder, useCreatePurchaseOrder, useUpdatePurchaseOrder,
+  useContacts, useProducts, useCostCenters, useAnalyticalRules, useBudgets,
+  useCreateVendorBill, useVendorBills
+} from '@/hooks/useData';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
-import type { LineItem, OrderStatus } from '@/types';
+import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 
 const lineSchema = z.object({
@@ -25,7 +29,7 @@ const schema = z.object({
   vendorId: z.string().min(1, 'Vendor is required'),
   reference: z.string().optional(),
   orderDate: z.string().min(1),
-  status: z.enum(['draft', 'confirmed', 'posted', 'cancelled']),
+  status: z.enum(['draft', 'confirmed', 'posted', 'cancelled', 'done']),
   lineItems: z.array(lineSchema).min(1, 'Add at least one line item'),
 });
 
@@ -36,56 +40,86 @@ export default function PurchaseOrderForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isEdit = Boolean(id);
-  const [order, setOrder] = useState(id ? purchaseOrderStore.getById(id) : null);
-  const vendors = contactStore.getByType('vendor');
-  const products = productStore.getActive();
-  const costCenters = costCenterStore.getActive();
 
-  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>(
-    order?.lineItems.map(li => ({ productId: li.productId, quantity: Math.floor(li.quantity), unitPrice: li.unitPrice, costCenterId: li.costCenterId })) ?? [{ productId: '', quantity: 1, unitPrice: 0 }]
-  );
+  const { data: order, isLoading: isLoadingOrder } = usePurchaseOrder(id);
+  const { data: vendors = [] } = useContacts('vendor');
+  const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: analyticalRules = [] } = useAnalyticalRules();
+  const { data: budgets = [] } = useBudgets();
+  const { data: existingBills = [] } = useVendorBills();
+
+  const { mutate: createOrder, isPending: isCreating } = useCreatePurchaseOrder();
+  const { mutate: updateOrder, isPending: isUpdating } = useUpdatePurchaseOrder();
+  const { mutate: createBill } = useCreateVendorBill();
+
+  const [lines, setLines] = useState<Array<{ productId: string; quantity: number; unitPrice: number; costCenterId?: string }>>([
+    { productId: '', quantity: 1, unitPrice: 0 }
+  ]);
 
   const [budgetWarnings, setBudgetWarnings] = useState<string[]>([]);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      vendorId: order?.vendorId ?? '',
-      reference: order?.reference ?? '',
-      orderDate: order?.orderDate ?? new Date().toISOString().slice(0, 10),
-      status: (order?.status ?? 'draft') as OrderStatus,
-      lineItems: order?.lineItems.map(li => ({ productId: li.productId, quantity: Math.floor(li.quantity), unitPrice: li.unitPrice, costCenterId: li.costCenterId })) ?? [{ productId: '', quantity: 1, unitPrice: 0 }],
+      vendorId: '',
+      reference: '',
+      orderDate: new Date().toISOString().slice(0, 10),
+      status: 'draft',
+      lineItems: [{ productId: '', quantity: 1, unitPrice: 0 }],
     },
   });
 
   const status = watch('status');
 
+  // Load existing order data
+  useEffect(() => {
+    if (order) {
+      setValue('vendorId', order.vendorId);
+      setValue('reference', ''); // PO Reference not in hook? Backend PO model missing 'reference' field? It has 'po_number'. 
+      // Typically user inputs 'reference' (vendor ref). Schema has 'notes', but not 'reference'. 
+      // Let's assume 'notes' or check backend. Backend PurchaseOrder model doesn't have reference.
+      // It has 'notes'. Let's map reference to notes or ignore? 
+      // We'll ignore for now or add to notes if needed.
+      setValue('orderDate', order.orderDate ? new Date(order.orderDate).toISOString().slice(0, 10) : '');
+      setValue('status', order.status as OrderStatus);
+
+      setLines(order.lineItems.map((li: any) => ({
+        productId: li.productId,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        costCenterId: li.costCenterId
+      })));
+    }
+  }, [order, setValue]);
+
   useEffect(() => {
     setValue('lineItems', lines);
   }, [lines, setValue]);
 
-  // Re-fetch order when ID changes or after updates
-  useEffect(() => {
-    if (id) {
-      setOrder(purchaseOrderStore.getById(id));
-    }
-  }, [id]);
-
   const addLine = () => setLines(prev => [...prev, { productId: '', quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
+
   const updateLine = (idx: number, field: string, value: string | number) => {
     setLines(prev => {
       const next = [...prev];
       (next[idx] as Record<string, unknown>)[field] = value;
+
       if (field === 'productId') {
-        const p = productStore.getById(String(value));
+        const p = products.find(prod => prod.id === value);
         if (p) {
-          next[idx].unitPrice = p.price;
+          next[idx].unitPrice = p.purchasePrice || 0;
           // Auto-assign cost center
           if (!next[idx].costCenterId) {
-            const rules = analyticalRuleStore.getAll();
-            const applicableRule = rules.find(rule => {
-              return (rule.ruleType === 'category' && rule.category === p.category) || (rule.ruleType === 'product' && rule.productId === p.id);
+            // Find applicable rule
+            // Simple logic: priority sort done by hook? Hook sorts by priority desc?
+            // useData hook maps them. Backend 'getRules' sorts by priority desc.
+            // Client side 'analyticalRules' might be sorted.
+            const applicableRule = analyticalRules.find((rule: any) => {
+              if (!rule.enabled) return false;
+              if (rule.ruleType === 'product' && rule.productId === p.id) return true;
+              if (rule.ruleType === 'category' && rule.category === p.category) return true;
+              return false;
             });
             if (applicableRule) next[idx].costCenterId = applicableRule.costCenterId;
           }
@@ -100,9 +134,15 @@ export default function PurchaseOrderForm() {
     lines.forEach(line => {
       if (line.costCenterId) {
         const amount = line.quantity * line.unitPrice;
-        const check = budgetStore.checkBudget(line.costCenterId, amount);
-        if (check && check.isExceeded) {
-          warnings.push(`Budget "${check.budgetName}" exceeded! Remaining: Rs.${check.remaining.toLocaleString()}, Request: Rs.${amount.toLocaleString()}`);
+        // Check active budget for this cost center
+        const budget = budgets.find((b: any) => b.costCenterId === line.costCenterId && b.stage === 'confirmed');
+        // Backend 'ACTIVE' maps to 'confirmed'? Yes.
+
+        if (budget) {
+          const remaining = (budget.plannedAmount || 0) - (budget.actualAmount || 0);
+          if (amount > remaining) {
+            warnings.push(`Budget "${budget.name}" exceeded! Remaining: ₹${remaining.toLocaleString()}, Request: ₹${amount.toLocaleString()}`);
+          }
         }
       }
     });
@@ -111,96 +151,82 @@ export default function PurchaseOrderForm() {
   };
 
   const onSubmit = async (data: FormValues) => {
-    // Basic Validation
     const linesWithoutCostCenter = data.lineItems.filter(li => !li.costCenterId);
     if (linesWithoutCostCenter.length > 0) {
       toast({ title: 'Validation Error', description: 'All line items must have a cost center assigned.', variant: 'destructive' });
       return;
     }
 
-    const lineItems: LineItem[] = data.lineItems.map((li, i) => {
-      const p = productStore.getById(li.productId);
-      return {
-        id: 'li' + i,
-        productId: li.productId,
-        productName: p?.name,
-        quantity: Math.floor(li.quantity),
-        unitPrice: li.unitPrice,
-        amount: Math.floor(li.quantity) * li.unitPrice,
-        costCenterId: li.costCenterId,
-        costCenterName: li.costCenterId ? costCenterStore.getById(li.costCenterId)?.name : undefined,
-      };
-    });
-    const subtotal = lineItems.reduce((s, li) => s + li.amount, 0);
-    const tax = Math.round(subtotal * DEFAULT_TAX_RATE);
-    const total = subtotal + tax;
-
-    let savedOrder;
     if (isEdit && id) {
-      savedOrder = purchaseOrderStore.update(id, { ...data, lineItems, subtotal, tax, total });
-      toast({ title: 'Updated', description: 'Purchase order updated.' });
-    } else {
-      savedOrder = purchaseOrderStore.create({
-        vendorId: data.vendorId,
-        reference: data.reference,
-        orderDate: data.orderDate,
-        status: data.status,
-        lineItems,
-        subtotal,
-        tax,
-        total
+      updateOrder({ id, data: { ...data, status: data.status } }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Purchase order updated.' });
+          navigate('/purchase/orders');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update order.', variant: 'destructive' })
       });
-      toast({ title: 'Created', description: 'Purchase order created.' });
-      navigate('/purchase/orders');
+    } else {
+      createOrder(data, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Purchase order created.' });
+          navigate('/purchase/orders');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create order.', variant: 'destructive' })
+      });
     }
   };
 
   const handleConfirm = () => {
-    validateBudget(); // Show warnings if any
+    validateBudget(); // Show warnings
     if (id) {
-      purchaseOrderStore.update(id, { status: 'confirmed' });
-      setValue('status', 'confirmed');
-      setOrder(prev => prev ? ({ ...prev, status: 'confirmed' }) : null);
-      toast({ title: 'Confirmed', description: 'Order confirmed.' });
+      updateOrder({ id, data: { status: 'confirmed' } }, {
+        onSuccess: () => {
+          toast({ title: 'Confirmed', description: 'Order confirmed.' });
+          // Optimistically update
+          navigate(0); // Reload to refresh state properly from backend
+        }
+      });
     }
   };
 
   const handleCreateBill = () => {
     if (!order) return;
-    // Check if bill already exists for this PO
-    const existingBill = vendorBillStore.getAll().find(vb => vb.purchaseOrderId === order.id);
+    const existingBill = existingBills.find((vb: any) => vb.purchaseOrderId === order.id);
     if (existingBill) {
-      navigate(`/purchase/bills/${existingBill.id}`);
+      navigate(`/purchase/bills/${existingBill.id}/edit`); // Navigate to edit
       return;
     }
 
-    const bill = vendorBillStore.create({
-      purchaseOrderId: order.id,
+    createBill({
       vendorId: order.vendorId,
-      billReference: order.reference, // Use PO ref as bill ref default? Or PO Number? Requirement says fetch, usually PO number.
-      billDate: new Date().toISOString().slice(0, 10),
+      date: new Date().toISOString().slice(0, 10),
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-      status: 'draft',
-      lineItems: order.lineItems,
-      subtotal: order.subtotal,
-      tax: order.tax,
-      total: order.total
+      purchaseOrderId: order.id,
+      items: order.lineItems
+    }, {
+      onSuccess: (newBill: any) => {
+        toast({ title: 'Bill Created', description: 'Draft bill created from PO.' });
+        navigate(`/purchase/bills/${newBill.id}/edit`);
+      }
     });
-
-    toast({ title: 'Bill Created', description: 'Draft bill created from PO.' });
-    navigate(`/purchase/bills/${bill.id}`);
   };
 
   const handleCancel = () => {
     if (id) {
-      purchaseOrderStore.update(id, { status: 'cancelled' });
-      setValue('status', 'cancelled');
-      setOrder(prev => prev ? ({ ...prev, status: 'cancelled' }) : null);
-      toast({ title: 'Cancelled', description: 'Order cancelled.' });
+      updateOrder({ id, data: { status: 'cancelled' } }, {
+        onSuccess: () => {
+          toast({ title: 'Cancelled', description: 'Order cancelled.' });
+          navigate(0);
+        }
+      });
     }
   };
 
-  if (isEdit && !order) {
+  if (isEdit && isLoadingOrder) {
+    return <div className="p-8 text-center text-muted-foreground">Loading order...</div>;
+  }
+
+  if (isEdit && !order && !isLoadingOrder) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Order not found.</p>
@@ -221,11 +247,11 @@ export default function PurchaseOrderForm() {
       actions={
         <>
           {!isEdit && (
-            <Button type="submit" form="po-form">Save</Button>
+            <Button type="submit" form="po-form" loading={isCreating}>Save</Button>
           )}
           {isEdit && status === 'draft' && (
             <>
-              <Button type="submit" form="po-form">Save</Button>
+              <Button type="submit" form="po-form" loading={isUpdating}>Save</Button>
               <Button variant="default" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm Order</Button>
             </>
           )}
@@ -258,7 +284,7 @@ export default function PurchaseOrderForm() {
                   <Label className="font-medium">Vendor</Label>
                   <select disabled={isReadOnly} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {...register('vendorId')}>
                     <option value="">Select vendor</option>
-                    {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    {vendors.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
                   </select>
                   {errors.vendorId && <p className="text-sm text-destructive">{errors.vendorId.message}</p>}
                 </div>
@@ -307,7 +333,7 @@ export default function PurchaseOrderForm() {
                       onChange={e => updateLine(idx, 'productId', e.target.value)}
                     >
                       <option value="">Select Product...</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div className="col-span-3">

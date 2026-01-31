@@ -13,16 +13,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { productStore } from '@/services/mockData';
+import { useProducts } from '@/hooks/useData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
 
 export default function Products() {
   const navigate = useNavigate();
+  const { data: allProducts, isLoading } = useProducts();
+
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'archived'>('confirmed');
 
-  const all = productStore.getAll();
+  const all = allProducts || [];
   const filtered = all.filter(p => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === 'all' || p.category === categoryFilter;
@@ -34,6 +36,10 @@ export default function Products() {
     const found = PRODUCT_CATEGORIES.find(c => c.value === value);
     return found ? found.label : value;
   };
+
+  if (isLoading) {
+    return <div className="p-8 text-center text-muted-foreground">Loading products...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -80,8 +86,7 @@ export default function Products() {
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="all">All status</option>
-              <option value="draft">Draft</option>
-              <option value="confirmed">Confirmed</option>
+              <option value="confirmed">Active</option>
               <option value="archived">Archived</option>
             </select>
           </div>
@@ -116,7 +121,9 @@ export default function Products() {
                     <TableCell>Rs. {p.price.toLocaleString()}</TableCell>
                     <TableCell>Rs. {p.purchasePrice.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={p.status === 'confirmed' ? 'default' : p.status === 'draft' ? 'secondary' : 'outline'}>{p.status}</Badge>
+                      <Badge variant={p.status === 'confirmed' ? 'default' : 'secondary'}>
+                        {p.status === 'confirmed' ? 'Active' : 'Archived'}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))

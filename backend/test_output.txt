@@ -1,0 +1,15 @@
+Testing email sending...
+User: dhruvinvaghasiya297@gmail.com
+Host: smtp.gmail.com
+Port: 587
+Secure: false
+Error occurred while sending email:
+Error: connect ETIMEDOUT 192.178.211.109:587
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16) {
+  errno: -4039,
+  code: 'ESOCKET',
+  syscall: 'connect',
+  address: '192.178.211.109',
+  port: 587,
+  command: 'CONN'
+}

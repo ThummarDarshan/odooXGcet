@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { analyticalRuleStore, costCenterStore, productStore } from '@/services/mockData';
+import { useAnalyticalRule, useCreateAnalyticalRule, useUpdateAnalyticalRule, useCostCenters, useProducts } from '@/hooks/useData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
 import type { ProductCategory } from '@/types';
 
@@ -34,11 +34,15 @@ export default function AnalyticalModelForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isEdit = Boolean(id);
-  const rule = id ? analyticalRuleStore.getById(id) : null;
-  const costCenters = costCenterStore.getActive();
-  const products = productStore.getActive();
 
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { data: remoteRule, isLoading: isLoadingRule } = useAnalyticalRule(id);
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
+
+  const { mutate: createRule, isPending: isCreating } = useCreateAnalyticalRule();
+  const { mutate: updateRule, isPending: isUpdating } = useUpdateAnalyticalRule();
+
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', ruleType: 'category', costCenterId: '', priority: 0, enabled: true },
   });
@@ -46,38 +50,51 @@ export default function AnalyticalModelForm() {
   const ruleType = watch('ruleType');
 
   useEffect(() => {
-    if (rule) reset({
-      name: rule.name,
-      ruleType: rule.ruleType,
-      productId: rule.productId ?? '',
-      category: rule.category ?? '',
-      costCenterId: rule.costCenterId,
-      priority: rule.priority,
-      enabled: rule.enabled,
-    });
-  }, [rule, reset]);
+    if (remoteRule) {
+      reset({
+        name: remoteRule.name,
+        ruleType: remoteRule.ruleType as 'product' | 'category',
+        productId: remoteRule.productId ?? '',
+        category: remoteRule.category ?? '',
+        costCenterId: remoteRule.costCenterId,
+        priority: remoteRule.priority,
+        enabled: remoteRule.enabled,
+      });
+    }
+  }, [remoteRule, reset]);
 
   const onSubmit = (data: FormValues) => {
-    const payload = {
-      name: data.name,
-      ruleType: data.ruleType,
-      productId: data.ruleType === 'product' ? data.productId : undefined,
-      category: data.ruleType === 'category' ? (data.category as ProductCategory) : undefined,
-      costCenterId: data.costCenterId,
-      priority: data.priority,
-      enabled: data.enabled,
-    };
+    // The hook handles payload mapping? No, the hook expects raw data or mapped data?
+    // Let's check useData.ts hooks.
+    // useCreateAnalyticalRule: expects object with { name, ruleType, productId, category, costCenterId, priority, enabled }
+    // which matches our FormValues except ruleType string case?
+    // useData: "priority_type: data.ruleType === 'product' ? 'PRODUCT' : 'CATEGORY'"
+    // So if data.ruleType is 'product'/'category', it works.
+
     if (isEdit && id) {
-      analyticalRuleStore.update(id, payload);
-      toast({ title: 'Updated', description: 'Rule updated successfully.' });
+      updateRule({ id, data }, {
+        onSuccess: () => {
+          toast({ title: 'Updated', description: 'Rule updated successfully.' });
+          navigate('/account/analytical-models');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to update rule.', variant: 'destructive' })
+      });
     } else {
-      analyticalRuleStore.create(payload);
-      toast({ title: 'Created', description: 'Rule created successfully.' });
+      createRule(data, {
+        onSuccess: () => {
+          toast({ title: 'Created', description: 'Rule created successfully.' });
+          navigate('/account/analytical-models');
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to create rule.', variant: 'destructive' })
+      });
     }
-    navigate('/account/analytical-models');
   };
 
-  if (isEdit && !rule) {
+  if (isEdit && isLoadingRule) {
+    return <div className="p-8 text-center text-muted-foreground">Loading rule...</div>;
+  }
+
+  if (isEdit && !remoteRule && !isLoadingRule) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Rule not found.</p>
@@ -114,7 +131,7 @@ export default function AnalyticalModelForm() {
                 <Label htmlFor="productId">Product</Label>
                 <select id="productId" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" {...register('productId')}>
                   <option value="">Select product</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
             )}
@@ -136,8 +153,9 @@ export default function AnalyticalModelForm() {
               {errors.costCenterId && <p className="text-sm text-destructive">{errors.costCenterId.message}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="priority">Priority (lower = higher priority)</Label>
+              <Label htmlFor="priority">Priority (higher number = higher priority)</Label>
               <Input id="priority" type="number" {...register('priority')} />
+              <p className="text-xs text-muted-foreground">Note: Backend uses higher number = higher priority.</p>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="enabled" {...register('enabled')} className="rounded border-input" />
@@ -145,8 +163,7 @@ export default function AnalyticalModelForm() {
             </div>
           </CardContent>
           <CardFooter className="flex gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" loading={isCreating || isUpdating}>
               {isEdit ? 'Update' : 'Create'}
             </Button>
             <Button type="button" variant="outline" asChild><Link to="/account/analytical-models">Cancel</Link></Button>

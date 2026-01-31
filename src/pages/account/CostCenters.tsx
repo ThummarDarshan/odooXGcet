@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Plus, Pencil, Search } from 'lucide-react';
+import { Plus, Pencil, Search, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,14 +13,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { costCenterStore } from '@/services/mockData';
+import { useCostCenters } from '@/hooks/useData';
 
 export default function CostCenters() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const all = costCenterStore.getAll();
+  const { data: all = [], isLoading } = useCostCenters();
+
   const filtered = all.filter(cc =>
-    !search || cc.name.toLowerCase().includes(search.toLowerCase()) || cc.description.toLowerCase().includes(search.toLowerCase())
+    !search ||
+    cc.name.toLowerCase().includes(search.toLowerCase()) ||
+    (cc.code || '').toLowerCase().includes(search.toLowerCase()) ||
+    (cc.description || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -41,7 +45,7 @@ export default function CostCenters() {
       <Card>
         <CardHeader>
           <CardTitle>All Cost Centers</CardTitle>
-          <CardDescription>Search by name or description</CardDescription>
+          <CardDescription>Search by name, code or description</CardDescription>
           <div className="relative max-w-sm pt-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -56,15 +60,25 @@ export default function CostCenters() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center py-8">
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     No cost centers found.
                   </TableCell>
                 </TableRow>
@@ -75,6 +89,7 @@ export default function CostCenters() {
                     className="cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => navigate(`/account/cost-centers/${cc.id}/edit`)}
                   >
+                    <TableCell className="font-medium font-mono text-xs">{cc.code}</TableCell>
                     <TableCell className="font-medium">{cc.name}</TableCell>
                     <TableCell>{cc.description}</TableCell>
                     <TableCell>
