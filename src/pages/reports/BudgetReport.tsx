@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { reportService } from '@/services/reportData';
 import { exportToCSV } from '@/lib/utils';
-import { Budget, SalesOrder } from '@/types';
+import { Budget, SalesOrder, CustomerInvoice } from '@/types';
 import { Download } from 'lucide-react';
 
 function getStatusBadge(status: string) {
@@ -14,20 +14,22 @@ function getStatusBadge(status: string) {
   return <Badge className="bg-green-600 hover:bg-green-700 text-white">Under Budget</Badge>;
 }
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function BudgetReport() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [budgetsData, salesData] = await Promise.all([
+        const [budgetsData, invoicesData] = await Promise.all([
           reportService.getBudgets(),
-          reportService.getSalesOrders()
+          reportService.getCustomerInvoices()
         ]);
         setBudgets(budgetsData);
-        setSalesOrders(salesData);
+        setInvoices(invoicesData);
       } catch (error) {
         console.error("Failed to fetch report data", error);
       } finally {
@@ -57,12 +59,40 @@ export default function BudgetReport() {
   const totalBudget = budgets.reduce((sum, b) => sum + Number(b.plannedAmount), 0);
   const totalActual = budgets.reduce((sum, b) => sum + Number(b.actualAmount), 0);
 
-  // Calculate Total Sales (only posted)
-  const totalSales = salesOrders
-    .filter(so => so.status === 'posted')
-    .reduce((sum, so) => sum + Number(so.total), 0);
+  // Calculate Total Sales (only posted/paid invoices)
+  const totalSales = invoices
+    .filter(inv => ['POSTED', 'PAID', 'PARTIALLY_PAID', 'posted', 'paid', 'partially_paid'].includes(inv.status))
+    .reduce((sum, inv) => sum + Number(inv.total), 0);
 
-  if (loading) return <div>Loading report...</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[300px]" />
+            <Skeleton className="h-4 w-[250px]" />
+          </div>
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-[120px]" />
+            <Skeleton className="h-24 w-[200px]" />
+            <Skeleton className="h-24 w-[250px]" />
+          </div>
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-[200px]" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(8).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

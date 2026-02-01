@@ -27,6 +27,8 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function BudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -43,8 +45,10 @@ export default function BudgetForm() {
   // Let's stick to update status to ARCHIVED for consistency with UI "Archive".
 
   const [budget, setBudget] = useState<Budget | undefined>();
+  const [isRevising, setIsRevising] = useState(false);
+  const [isStartingRevision, setIsStartingRevision] = useState(false);
 
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: '',
@@ -77,6 +81,33 @@ export default function BudgetForm() {
   }, [isEdit, isBudgetError, budget, remoteBudget, isLoadingBudget, queryClient]);
 
   const onSubmit = (data: FormValues) => {
+    if (isRevising && id && budget) {
+      const nextVersion = (budget.version || 1) + 1;
+      const payload = {
+        ...data,
+        name: budget.name, // Keep original parameters
+        costCenterId: budget.costCenterId,
+        type: budget.type,
+        periodStart: budget.periodStart,
+        periodEnd: budget.periodEnd,
+        revisionOfId: id,
+        version: nextVersion,
+        status: 'ACTIVE' // Save as confirmed immediately
+      };
+
+      createBudget(payload, {
+        onSuccess: (newBudget: any) => {
+          // Mark old version as REVISED
+          updateBudget({ id, data: { status: 'REVISED' } });
+          toast({ title: 'Revision Saved', description: `New version ${nextVersion} created.` });
+          setIsRevising(false);
+          navigate(`/account/budgets/${newBudget.id}`);
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to save revision.', variant: 'destructive' })
+      });
+      return;
+    }
+
     if (isEdit && id) {
       updateBudget({ id, data }, {
         onSuccess: () => {
@@ -109,27 +140,16 @@ export default function BudgetForm() {
 
   const handleRevise = () => {
     if (id && budget) {
-      // Create new version
-      const nextVersion = (budget.version || 1) + 1;
-      const payload = {
-        name: `${budget.name} (v${nextVersion})`,
-        costCenterId: budget.costCenterId,
-        type: budget.type,
-        periodStart: budget.periodStart,
-        periodEnd: budget.periodEnd,
-        plannedAmount: budget.plannedAmount,
-        description: `Revision of ${budget.name}`,
-        revisionOfId: id,
-        version: nextVersion
-      };
-
-      createBudget(payload, {
-        onSuccess: (newBudget: any) => {
-          updateBudget({ id, data: { status: 'REVISED' } });
-          toast({ title: 'Revised', description: `Created version ${nextVersion}.` });
-          navigate(`/account/budgets/${newBudget.id}/edit`);
-        }
-      });
+      setIsStartingRevision(true);
+      // Simulate/Show loading animation to prevent multiple clicks and satisfy user request
+      setTimeout(() => {
+        setIsRevising(true);
+        setIsStartingRevision(false);
+        toast({
+          title: 'Revision Mode',
+          description: 'You can now update the planned amount for this budget.'
+        });
+      }, 700);
     }
   };
 
@@ -147,7 +167,36 @@ export default function BudgetForm() {
   };
 
   if (isEdit && isLoadingBudget) {
-    return <div className="p-8 text-center text-muted-foreground">Loading budget...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[100px]" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-8">
+            <Skeleton className="h-12 w-full" />
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
 
@@ -162,8 +211,9 @@ export default function BudgetForm() {
     );
   }
 
-  // Only editable in 'draft' stage
-  const isReadOnly = isEdit && budget?.stage !== 'draft';
+  // Only editable in 'draft' stage OR when revising
+  const isReadOnly = isEdit && budget?.stage !== 'draft' && !isRevising;
+  const isFieldFixed = isEdit && budget?.stage !== 'draft'; // Fixed for everything except amount in revision mode
 
   return (
     <DocumentLayout
@@ -182,8 +232,22 @@ export default function BudgetForm() {
 
           {budget?.stage === 'confirmed' && (
             <>
-              <Button variant="outline" onClick={handleRevise}>Revise</Button>
-              <Button variant="secondary" onClick={handleArchive}>Archive</Button>
+              {!isRevising && (
+                <Button
+                  variant="outline"
+                  onClick={handleRevise}
+                  loading={isStartingRevision}
+                  className="transition-all duration-300"
+                >
+                  Revise
+                </Button>
+              )}
+              {isRevising && (
+                <Button type="submit" form="budget-form" loading={isCreating || isUpdating}>
+                  Save Revision
+                </Button>
+              )}
+              {!isRevising && <Button variant="secondary" onClick={handleArchive}>Archive</Button>}
             </>
           )}
 
@@ -218,7 +282,7 @@ export default function BudgetForm() {
                     id="costCenterId"
                     className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     {...register('costCenterId')}
-                    disabled={isReadOnly}
+                    disabled={isFieldFixed}
                   >
                     <option value="">Select cost center</option>
                     {costCenters.map(cc => <option key={cc.id} value={cc.id}>{cc.name}</option>)}
@@ -232,7 +296,7 @@ export default function BudgetForm() {
                     id="type"
                     className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     {...register('type')}
-                    disabled={isReadOnly}
+                    disabled={isFieldFixed}
                   >
                     <option value="EXPENSE">Expense (Vendor Bills)</option>
                     <option value="INCOME">Income (Sales Invoices)</option>
@@ -244,13 +308,13 @@ export default function BudgetForm() {
                   <Label htmlFor="plannedAmount" className="text-xs font-medium text-muted-foreground">Planned Amount</Label>
                   <div className="relative group">
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 font-bold text-muted-foreground/50 transition-colors group-focus-within:text-primary">₹</span>
-                    <Input
+                    <input
                       id="plannedAmount"
                       type="number"
                       step="0.01"
                       {...register('plannedAmount')}
                       disabled={isReadOnly}
-                      className="pl-5 font-bold text-base h-9 border-0 border-b rounded-none pr-0 focus-visible:ring-0 focus-visible:border-primary placeholder:text-muted-foreground/30"
+                      className="w-full pl-5 font-bold text-base h-9 border-0 border-b bg-transparent rounded-none pr-0 focus:outline-none focus:border-primary placeholder:text-muted-foreground/30 disabled:opacity-50"
                       placeholder="0.00"
                     />
                   </div>
@@ -262,12 +326,12 @@ export default function BudgetForm() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="periodStart" className="text-xs font-medium text-muted-foreground">Start Date</Label>
-                    <Input id="periodStart" type="date" className="h-9 text-xs bg-muted/30" {...register('periodStart')} disabled={isReadOnly} />
+                    <Input id="periodStart" type="date" className="h-9 text-xs bg-muted/30" {...register('periodStart')} disabled={isFieldFixed} />
                     {errors.periodStart && <p className="text-[11px] text-destructive">{errors.periodStart.message}</p>}
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="periodEnd" className="text-xs font-medium text-muted-foreground">End Date</Label>
-                    <Input id="periodEnd" type="date" className="h-9 text-xs bg-muted/30" {...register('periodEnd')} disabled={isReadOnly} />
+                    <Input id="periodEnd" type="date" className="h-9 text-xs bg-muted/30" {...register('periodEnd')} disabled={isFieldFixed} />
                     {errors.periodEnd && <p className="text-[11px] text-destructive">{errors.periodEnd.message}</p>}
                   </div>
                 </div>

@@ -11,6 +11,7 @@ const { createProduct, updateProduct } = require('../validators/product.validato
 
 router.post('/', validate(createProduct), productController.create);
 router.get('/', productController.list);
+router.get('/categories', productController.getCategories);
 router.get('/:id', productController.getOne);
 router.patch('/:id', validate(updateProduct), productController.update);
 router.delete('/:id', productController.delete);

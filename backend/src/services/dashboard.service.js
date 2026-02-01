@@ -2,16 +2,16 @@ const prisma = require('../config/database');
 
 class DashboardService {
     async getMetrics() {
-        // Total Sales (Confirmed Sales Orders)
-        const sales = await prisma.salesOrder.aggregate({
+        // Total Sales (Posted Invoices)
+        const sales = await prisma.customerInvoice.aggregate({
             _sum: { total_amount: true },
-            where: { status: { in: ['CONFIRMED', 'DELIVERED'] } }
+            where: { status: { in: ['POSTED', 'PAID', 'PARTIALLY_PAID'] } }
         });
 
-        // Total Purchases (Confirmed Purchase Orders)
-        const purchases = await prisma.purchaseOrder.aggregate({
+        // Total Purchases (Posted Bills)
+        const purchases = await prisma.vendorBill.aggregate({
             _sum: { total_amount: true },
-            where: { status: 'CONFIRMED' }
+            where: { status: { in: ['POSTED', 'PAID', 'PARTIALLY_PAID'] } }
         });
 
         // Outstanding Receivables (Unpaid Invoices)
@@ -45,7 +45,7 @@ class DashboardService {
         // or use groupBy if supported well enough (groupBy date is tricky).
         // Let's use raw query for efficiency or JS aggregation for safety.
         // Given complexity, let's fetch essential fields and aggregate in JS for now (safer across DBs).
-        
+
         const invoices = await prisma.customerInvoice.findMany({
             where: {
                 invoice_date: { gte: sixMonthsAgo },
@@ -118,10 +118,18 @@ class DashboardService {
 
         const accountMap = accounts.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.name }), {});
 
-        return distribution.map(d => ({
+        const data = distribution.map(d => ({
             name: accountMap[d.analytical_account_id] || 'Unknown',
             value: Number(d._sum.total_amount || 0)
         })).filter(d => d.value > 0);
+
+        // Calculate total and add percentages
+        const total = data.reduce((sum, item) => sum + item.value, 0);
+
+        return data.map(item => ({
+            ...item,
+            percentage: total > 0 ? Math.round((item.value / total) * 100) : 0
+        }));
     }
 }
 

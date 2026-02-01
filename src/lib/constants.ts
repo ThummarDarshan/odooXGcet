@@ -99,6 +99,11 @@ export const CUSTOMER_NAV_ITEMS = [
     path: '/portal/invoices',
     icon: 'FileText',
   },
+  {
+    title: 'Payment History',
+    path: '/portal/payments',
+    icon: 'CreditCard',
+  },
 ];
 
 // ==================== BUDGET STATUS THRESHOLDS ====================

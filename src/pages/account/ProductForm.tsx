@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useProduct, useCreateProduct, useUpdateProduct, useArchiveProduct } from '@/hooks/useData';
+import { useProduct, useCreateProduct, useUpdateProduct, useArchiveProduct, useProductCategories } from '@/hooks/useData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 import type { Product } from '@/types';
@@ -23,6 +23,8 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function ProductForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -30,9 +32,20 @@ export default function ProductForm() {
   const isEdit = Boolean(id);
 
   const { data: remoteProduct, isLoading: isLoadingProduct } = useProduct(id);
+  const { data: dynamicCategories } = useProductCategories();
   const { mutate: createProduct, isPending: isCreating } = useCreateProduct();
   const { mutate: updateProduct, isPending: isUpdating } = useUpdateProduct();
   const { mutate: archiveProduct } = useArchiveProduct();
+
+  // Merge static categories with dynamic ones from DB
+  const allCategories = [...PRODUCT_CATEGORIES];
+  if (dynamicCategories) {
+    dynamicCategories.forEach(cat => {
+      if (!allCategories.some(c => c.value === cat)) {
+        allCategories.push({ value: cat as any, label: cat });
+      }
+    });
+  }
 
   const [product, setProduct] = useState<Product | undefined>();
 
@@ -64,14 +77,14 @@ export default function ProductForm() {
         purchasePrice: remoteProduct.purchasePrice,
         status: (remoteProduct.status as 'confirmed' | 'archived') || 'confirmed'
       });
-      // Check if category is custom
-      const isStandard = PRODUCT_CATEGORIES.some(c => c.value === remoteProduct.category);
-      if (!isStandard && remoteProduct.category) {
+      // Check if category exists in allCategories. If not, it's custom.
+      const exists = allCategories.some(c => c.value === remoteProduct.category);
+      if (!exists && remoteProduct.category) {
         setIsCustomCategory(true);
         setCustomCategory(remoteProduct.category);
       }
     }
-  }, [remoteProduct, reset]);
+  }, [remoteProduct, reset, allCategories]);
 
   // Handle "Create New..." selection
   useEffect(() => {
@@ -136,7 +149,33 @@ export default function ProductForm() {
   };
 
   if (isEdit && isLoadingProduct) {
-    return <div className="p-8 text-center text-muted-foreground">Loading product...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <Skeleton className="h-10 w-[120px]" />
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-6">
+            <Skeleton className="h-12 w-full" />
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-32 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (isEdit && !remoteProduct && !isLoadingProduct) {
@@ -189,7 +228,7 @@ export default function ProductForm() {
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       {...register('category')}
                     >
-                      {PRODUCT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      {allCategories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                       <option value="custom_new" className="font-bold text-primary">+ Create New Category...</option>
                     </select>
                   ) : (

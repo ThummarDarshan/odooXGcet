@@ -7,6 +7,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  imageUrl?: string;
   createdAt: string;
 }
 
@@ -24,6 +25,7 @@ export interface Contact {
   id: string;
   name: string;
   image?: string;
+  image_url?: string;
   email: string;
   phone: string;
   // Address

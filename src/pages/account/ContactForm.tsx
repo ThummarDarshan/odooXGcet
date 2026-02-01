@@ -13,11 +13,12 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useContact, useCreateContact, useUpdateContact } from '@/hooks/useData';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { cn } from '@/lib/utils';
 import type { Contact } from '@/types';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
-  image: z.string().optional(),
+  image: z.any().optional(),
   email: z.string().email('Valid email required'),
   phone: z.string().min(1, 'Phone is required'),
   street: z.string().optional(),
@@ -33,6 +34,8 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ContactForm() {
   const { id } = useParams();
@@ -84,6 +87,7 @@ export default function ContactForm() {
         type: remoteContact.type,
         tags: remoteContact.tags ?? [],
         portalAccess: remoteContact.portalAccess,
+        image: remoteContact.image_url,
         status: remoteContact.status === 'confirmed' ? 'confirmed' : remoteContact.status === 'archived' ? 'archived' : 'draft',
       });
       setActiveTags(remoteContact.tags ?? []);
@@ -133,32 +137,107 @@ export default function ContactForm() {
   };
 
   const onSubmit = (data: FormValues) => {
-    const payload = {
-      ...data,
-      tagName: data.tags?.[0], // Backend expects 'tagName' for single tag logic, or we update backend to accept tags array
-    };
+    // If there's an image file to upload, we should use FormData
+    // However, currently setValue('image', reader.result) stores a base64 string
+    // The backend's contacts.controller expects req.file (from multer)
+    // To support Cloudinary upload, we need to send a multipart/form-data request
 
-    if (isEdit && id) {
-      updateContact({ id, data: payload }, {
-        onSuccess: () => {
-          toast({ title: 'Updated', description: 'Contact updated successfully.' });
-          navigate('/account/contacts');
-        },
-        onError: () => toast({ title: 'Error', description: 'Failed to update contact', variant: 'destructive' })
+    // Check if image is a File or a string
+    const imageValue = (watch('image') as any);
+    const hasNewFile = imageValue instanceof File;
+
+    if (hasNewFile) {
+      const formData = new FormData();
+      // Append all regular fields
+      Object.keys(data).forEach(key => {
+        if (key !== 'image' && key !== 'tags') {
+          formData.append(key, (data as any)[key]);
+        }
       });
+      if (data.tags) {
+        formData.append('tagName', data.tags[0] || '');
+      }
+      formData.append('image', imageValue);
+
+      if (isEdit && id) {
+        updateContact({ id, data: formData }, {
+          onSuccess: () => {
+            toast({ title: 'Updated', description: 'Contact updated successfully.' });
+            navigate('/account/contacts');
+          },
+          onError: () => toast({ title: 'Error', description: 'Failed to update contact', variant: 'destructive' })
+        });
+      } else {
+        createContact(formData, {
+          onSuccess: () => {
+            toast({ title: 'Created', description: 'Contact created successfully.' });
+            navigate('/account/contacts');
+          },
+          onError: () => toast({ title: 'Error', description: 'Failed to create contact', variant: 'destructive' })
+        });
+      }
     } else {
-      createContact(payload, {
-        onSuccess: () => {
-          toast({ title: 'Created', description: 'Contact created successfully.' });
-          navigate('/account/contacts');
-        },
-        onError: () => toast({ title: 'Error', description: 'Failed to create contact', variant: 'destructive' })
-      });
+      // Fallback to JSON payload if no new image file
+      const payload = {
+        ...data,
+        tagName: data.tags?.[0],
+        image_url: data.image // If it's already a URL
+      };
+
+      if (isEdit && id) {
+        updateContact({ id, data: payload }, {
+          onSuccess: () => {
+            toast({ title: 'Updated', description: 'Contact updated successfully.' });
+            navigate('/account/contacts');
+          },
+          onError: () => toast({ title: 'Error', description: 'Failed to update contact', variant: 'destructive' })
+        });
+      } else {
+        createContact(payload, {
+          onSuccess: () => {
+            toast({ title: 'Created', description: 'Contact created successfully.' });
+            navigate('/account/contacts');
+          },
+          onError: () => toast({ title: 'Error', description: 'Failed to create contact', variant: 'destructive' })
+        });
+      }
     }
   };
 
   if (isEdit && isLoadingContact) {
-    return <div className="p-8 text-center text-muted-foreground">Loading contact...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[100px]" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-8">
+            <div className="flex flex-col md:flex-row gap-8">
+              <div className="flex-1 space-y-6">
+                <Skeleton className="h-12 w-full" />
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              </div>
+              <div className="w-full md:w-1/3 flex flex-col items-center space-y-6">
+                <Skeleton className="h-32 w-32 rounded-lg" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (isEdit && !remoteContact && !isLoadingContact) {
@@ -249,29 +328,42 @@ export default function ContactForm() {
 
               {/* Right Column: Image & Tags */}
               <div className="w-full md:w-1/3 flex flex-col items-center space-y-6">
-                {/* Image Placeholder */}
-                <div className="w-32 h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/50 cursor-pointer transition-colors relative group overflow-hidden bg-muted/10">
+                <div
+                  className={cn(
+                    "w-32 h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-muted-foreground transition-all relative group overflow-hidden bg-muted/20 hover:bg-muted/30 hover:border-primary/50",
+                    watch('image') && "border-solid border-primary/20"
+                  )}
+                  onClick={() => document.getElementById('contact-image-upload')?.click()}
+                >
                   {watch('image') ? (
-                    <img src={watch('image')} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="relative w-full h-full">
+                      <img
+                        src={typeof watch('image') === 'string' ? watch('image') : URL.createObjectURL(watch('image') as any)}
+                        alt="Preview"
+                        className="w-full h-full object-cover animate-in fade-in duration-300"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Camera className="h-6 w-6 text-white" />
+                      </div>
+                    </div>
                   ) : (
                     <>
-                      <Camera className="h-8 w-8 mb-2 opacity-50" />
-                      <span className="text-xs font-medium">Upload Image</span>
+                      <div className="p-3 rounded-full bg-primary/10 mb-2 group-hover:bg-primary/20 transition-colors">
+                        <Camera className="h-6 w-6 text-primary opacity-70" />
+                      </div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Add Image</span>
                     </>
                   )}
-                  <Input
+                  <input
+                    id="contact-image-upload"
                     type="file"
-                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    className="hidden"
                     disabled={isReadOnly}
                     accept="image/*"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setValue('image', reader.result as string);
-                        };
-                        reader.readAsDataURL(file);
+                        setValue('image', file as any);
                       }
                     }}
                   />

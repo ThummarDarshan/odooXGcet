@@ -7,6 +7,7 @@ class AuthService {
         // Find user
         const user = await prisma.user.findUnique({
             where: { email },
+            include: { contact_link: true }
         });
 
         if (!user || !user.is_active) {
@@ -27,7 +28,12 @@ class AuthService {
         );
 
         // Return user data without password
-        const { password_hash, ...userData } = user;
+        const { password_hash, contact_link, ...userData } = user;
+
+        // Add image_url if contact_link exists
+        if (contact_link) {
+            userData.image_url = contact_link.image_url;
+        }
 
         return {
             user: userData,
@@ -85,6 +91,20 @@ class AuthService {
         });
 
         return { message: 'Password changed successfully' };
+    }
+
+    async getUserById(id) {
+        const user = await prisma.user.findUnique({
+            where: { id },
+            include: { contact_link: true }
+        });
+        if (!user) throw new Error('User not found');
+
+        const { password_hash, contact_link, ...userData } = user;
+        if (contact_link) {
+            userData.image_url = contact_link.image_url;
+        }
+        return userData;
     }
 }
 

@@ -126,6 +126,15 @@ class ProductService {
             }
         });
     }
+
+    async getCategories() {
+        const categories = await prisma.product.findMany({
+            select: { category: true },
+            distinct: ['category'],
+            where: { is_active: true }
+        });
+        return categories.map(c => c.category).filter(Boolean);
+    }
 }
 
 module.exports = new ProductService();

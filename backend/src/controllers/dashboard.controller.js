@@ -52,6 +52,7 @@ class DashboardController {
             }));
 
             const budgetUtilization = budgets.map(b => ({
+                id: b.id,
                 name: b.analytical_account?.name || 'Unknown',
                 utilized: Number(b.achievement_percentage),
                 planned: Number(b.budgeted_amount),

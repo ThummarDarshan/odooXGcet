@@ -314,9 +314,9 @@ export default function Dashboard() {
             {budgetUtilization.length === 0 ? (
               <p className="text-sm text-muted-foreground">No budgets configured. <Link to="/account/budgets/create" className="text-primary underline">Create a budget</Link> to track spending.</p>
             ) : (
-              budgetUtilization.map((budget: any) => (
+              budgetUtilization.map((budget: any, index: number) => (
                 <BudgetProgressBar
-                  key={budget.name}
+                  key={budget.id || budget.name || `budget-${index}`}
                   name={budget.name}
                   utilized={budget.utilized}
                   status={budget.status}

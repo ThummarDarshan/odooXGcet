@@ -11,6 +11,8 @@ import { PAYMENT_STATUSES } from '@/lib/constants';
 
 const payMap = Object.fromEntries(PAYMENT_STATUSES.map(s => [s.value, s]));
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function VendorBills() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -26,6 +28,38 @@ export default function VendorBills() {
     }
     return okSearch && okPay;
   });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[200px]" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <Skeleton className="h-10 w-[150px]" />
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-[200px]" />
+              <div className="flex gap-4">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-[150px]" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(5).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -69,9 +103,7 @@ export default function VendorBills() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
-              ) : filtered.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No bills found.</TableCell></TableRow>
               ) : (
                 filtered.map((vb: any) => (

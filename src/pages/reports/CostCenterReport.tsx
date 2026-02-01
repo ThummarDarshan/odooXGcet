@@ -7,6 +7,8 @@ import { exportToCSV } from '@/lib/utils';
 import { Budget } from '@/types';
 import { Download } from 'lucide-react';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function CostCenterReport() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,32 @@ export default function CostCenterReport() {
     exportToCSV(data, 'cost_center_report');
   };
 
-  if (loading) return <div>Loading report...</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[350px]" />
+            <Skeleton className="h-4 w-[250px]" />
+          </div>
+          <Skeleton className="h-10 w-[120px]" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-[200px]" />
+            <Skeleton className="h-4 w-[250px]" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(6).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

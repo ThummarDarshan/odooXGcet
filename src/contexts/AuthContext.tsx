@@ -25,23 +25,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('token');
 
     if (storedUser && token) {
-      try {
-        const backendUser = JSON.parse(storedUser);
-        // Normalize role to lowercase
-        const user = {
-          ...backendUser,
-          role: backendUser.role.toLowerCase() as UserRole
-        };
-        setState({
-          user,
-          isAuthenticated: true,
-          isLoading: false,
-        });
-      } catch {
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
+      const fetchUserData = async () => {
+        try {
+          const { data: response } = await api.get('/auth/me');
+          const backendUser = response.data;
+
+          const user = {
+            ...backendUser,
+            role: backendUser.role.toLowerCase() as UserRole,
+            imageUrl: backendUser.imageUrl || backendUser.image_url
+          };
+
+          localStorage.setItem('user', JSON.stringify(user));
+          setState({
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } catch (error) {
+          // If token is invalid or expired
+          try {
+            const backendUser = JSON.parse(storedUser);
+            const user = {
+              ...backendUser,
+              role: backendUser.role.toLowerCase() as UserRole,
+              imageUrl: backendUser.imageUrl || backendUser.image_url
+            };
+            setState({
+              user,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+          } catch {
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
+            setState(prev => ({ ...prev, isLoading: false }));
+          }
+        }
+      };
+
+      fetchUserData();
     } else {
       setState(prev => ({ ...prev, isLoading: false }));
     }
@@ -57,7 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Normalize role to lowercase for frontend
       const user = {
         ...backendUser,
-        role: backendUser.role.toLowerCase() as UserRole
+        role: backendUser.role.toLowerCase() as UserRole,
+        imageUrl: backendUser.imageUrl || backendUser.image_url
       };
 
       localStorage.setItem('token', token);

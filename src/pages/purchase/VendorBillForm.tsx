@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
 import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const lineSchema = z.object({ productId: z.string().min(1), quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'), unitPrice: z.coerce.number().min(0), costCenterId: z.string().optional() });
 const schema = z.object({
@@ -86,12 +87,12 @@ export default function VendorBillForm() {
       setValue('dueDate', bill.dueDate ? new Date(bill.dueDate).toISOString().slice(0, 10) : '');
       setValue('status', bill.status as OrderStatus);
 
-      setLines(bill.items.map((li: any) => ({
+      setLines(bill.items?.map((li: any) => ({
         productId: li.productId,
         quantity: li.quantity,
         unitPrice: li.unitPrice,
         costCenterId: li.costCenterId
-      })));
+      })) || []);
     }
   }, [bill, setValue]);
 
@@ -210,7 +211,42 @@ export default function VendorBillForm() {
     if (id) navigate(`/purchase/payments/create?billId=${id}`);
   };
 
-  if (isEdit && isLoadingBill) return <div className="p-8 text-center text-muted-foreground">Loading bill...</div>;
+  if (isEdit && isLoadingBill) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[100px]" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-8">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              {Array(3).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
 
 

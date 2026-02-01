@@ -53,6 +53,7 @@ import PaymentReport from "@/pages/reports/PaymentReport";
 // Customer Portal
 import CustomerDashboard from "@/pages/portal/CustomerDashboard";
 import PortalInvoices from "@/pages/portal/CustomerInvoices";
+import PortalPayments from "@/pages/portal/CustomerPayments";
 import PortalPay from "@/pages/portal/PortalPay";
 
 const queryClient = new QueryClient();
@@ -134,6 +135,7 @@ const App = () => (
               <Route path="/portal/dashboard" element={<CustomerDashboard />} />
               <Route path="/portal/invoices" element={<PortalInvoices />} />
               <Route path="/portal/invoices/:id" element={<CustomerInvoiceForm />} />
+              <Route path="/portal/payments" element={<PortalPayments />} />
               <Route path="/portal/pay" element={<PortalPay />} />
             </Route>
 

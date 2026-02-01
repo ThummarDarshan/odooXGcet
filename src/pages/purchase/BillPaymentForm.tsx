@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,10 +34,14 @@ export default function BillPaymentForm() {
   const { data: allBills = [], isLoading } = useVendorBills();
   const { mutate: createPayment, isPending } = useCreatePayment();
 
-  // Only show bills that are not fully paid
-  const bills = allBills.filter((vb: any) => (vb.paymentStatus !== 'paid' && vb.paymentStatus !== 'PAID') && (vb.status !== 'cancelled' && vb.status !== 'CANCELLED'));
+  // Only show bills that are not fully paid - Memoized to prevent infinite loops
+  const bills = useMemo(() =>
+    allBills.filter((vb: any) => (vb.paymentStatus !== 'paid' && vb.paymentStatus !== 'PAID') && (vb.status !== 'cancelled' && vb.status !== 'CANCELLED')),
+    [allBills]);
 
-  const selectedBill = preselectedBillId ? bills.find((b: any) => b.id === preselectedBillId) : null;
+  const selectedBill = useMemo(() =>
+    preselectedBillId ? bills.find((b: any) => b.id === preselectedBillId) : null,
+    [preselectedBillId, bills]);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -53,27 +57,23 @@ export default function BillPaymentForm() {
 
   const billId = watch('billId');
 
-  useEffect(() => {
-    if (billId) {
-      const bill = bills.find((b: any) => b.id === billId);
-      // Auto-set amount if user changes bill intentionally? 
-      // If we do this, it might annoy user if they already typed amount.
-      // But usually selecting bill implies paying remaining.
-      // We will leave it to manual input or rely on initial load for now, 
-      // OR explicitly set it if `amount` is 0.
-      if (bill) {
-        // Optionally set amount
-      }
-    }
-  }, [billId, bills]);
-
   // Update amount if selectedBill loads LATER (e.g. from hook)
   useEffect(() => {
-    if (preselectedBillId && !watch('amount')) {
+    if (preselectedBillId) {
       const b = bills.find((x: any) => x.id === preselectedBillId);
-      if (b) setValue('amount', b.total - b.paidAmount);
+      if (b && !watch('amount')) {
+        setValue('amount', b.total - b.paidAmount);
+      }
     }
   }, [bills, preselectedBillId, setValue, watch]);
+
+  // Handle manual bill selection change
+  useEffect(() => {
+    if (billId && !preselectedBillId) {
+      const b = bills.find((x: any) => x.id === billId);
+      if (b) setValue('amount', b.total - b.paidAmount);
+    }
+  }, [billId, bills, preselectedBillId, setValue]);
 
   const onSubmit = (data: FormValues) => {
     const bill = bills.find((b: any) => b.id === data.billId);
@@ -84,27 +84,7 @@ export default function BillPaymentForm() {
       amount: data.amount,
       method: data.paymentMode,
       type: 'outbound',
-      date: data.paymentDate, // Backend createPayment mostly uses current date or manual? Hook passed data.date? 
-      // My hook `useCreatePayment` doesn't map `date` to payload explicitly?
-      // Looking at `useCreatePayment` implementation in Step 264:
-      /*
-         const payload = {
-             contactId: data.contactId,
-             amount: data.amount,
-             paymentType: data.type === 'inbound' ? 'INCOMING' : 'OUTGOING',
-             paymentMethod: data.method.toUpperCase().replace(' ', '_'),
-             invoices: data.invoices
-         };
-      */
-      // It missed `paymentDate`!
-      // I should update useCreatePayment payload to include date if backend supports it.
-      // Checking backend PaymentsController.create:
-      /* const { amount, contactId, paymentType, paymentMethod, invoices } = req.body; */
-      // It does NOT seem to take `paymentDate` from body, uses `new Date()`?
-      // Wait, if users backdate payment?
-      // I should check backend model.
-      // For now, I will assume backend uses current date or I need to add date field.
-      // I will proceed without date mapping or include it just in case.
+      date: data.paymentDate,
       invoices: [{ id: data.billId, amount: data.amount }]
     }, {
       onSuccess: () => {

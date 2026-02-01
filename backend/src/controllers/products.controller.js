@@ -45,6 +45,15 @@ class ProductController {
             next(error);
         }
     }
+
+    async getCategories(req, res, next) {
+        try {
+            const categories = await productService.getCategories();
+            res.status(200).json({ success: true, data: categories });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = new ProductController();

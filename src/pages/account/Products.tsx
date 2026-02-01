@@ -13,16 +13,29 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useProducts } from '@/hooks/useData';
+import { useProducts, useProductCategories } from '@/hooks/useData';
 import { PRODUCT_CATEGORIES } from '@/lib/constants';
+
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function Products() {
   const navigate = useNavigate();
   const { data: allProducts, isLoading } = useProducts();
+  const { data: dynamicCategories } = useProductCategories();
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'confirmed' | 'archived'>('confirmed');
+
+  // Merge static categories with dynamic ones from DB
+  const allCategories = [...PRODUCT_CATEGORIES];
+  if (dynamicCategories) {
+    dynamicCategories.forEach(cat => {
+      if (!allCategories.some(c => c.value === cat)) {
+        allCategories.push({ value: cat as any, label: cat });
+      }
+    });
+  }
 
   const all = allProducts || [];
   const filtered = all.filter(p => {
@@ -33,12 +46,36 @@ export default function Products() {
   });
 
   const getCategoryLabel = (value: string) => {
-    const found = PRODUCT_CATEGORIES.find(c => c.value === value);
+    const found = allCategories.find(c => c.value === value);
     return found ? found.label : value;
   };
 
   if (isLoading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading products...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[200px]" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <Skeleton className="h-10 w-[120px]" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-10 w-full" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(5).fill(0).map((_, i) => (
+                <div key={i} className="flex items-center space-x-4">
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -76,7 +113,7 @@ export default function Products() {
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="all">All categories</option>
-              {PRODUCT_CATEGORIES.map(c => (
+              {allCategories.map(c => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>

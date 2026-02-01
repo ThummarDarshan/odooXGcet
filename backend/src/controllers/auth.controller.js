@@ -70,6 +70,18 @@ class AuthController {
             next(error);
         }
     }
+
+    async getMe(req, res, next) {
+        try {
+            const user = await authService.getUserById(req.user.id);
+            res.status(200).json({
+                success: true,
+                data: user,
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = new AuthController();

@@ -22,6 +22,7 @@ import {
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
 import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const lineSchema = z.object({
   productId: z.string().min(1),
@@ -191,7 +192,41 @@ export default function SalesOrderForm() {
   const tax = subtotal * DEFAULT_TAX_RATE;
   const total = subtotal + tax;
 
-  if (isEdit && isLoadingOrder) return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
+  if (isEdit && isLoadingOrder) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[100px]" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-8">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              {Array(3).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (isEdit && !order && !isLoadingOrder) return <div className="text-center py-12">Order not found.</div>;
 
   const isReadOnly = status === 'posted' || status === 'cancelled';

@@ -19,6 +19,7 @@ export const useContacts = (type?: 'customer' | 'vendor') => {
                 name: c.name,
                 email: c.email,
                 phone: c.phone,
+                image_url: c.image_url,
                 type: c.type,
                 // Map separate address fields
                 street: c.street,
@@ -47,6 +48,7 @@ export const useContact = (id: string | undefined) => {
                 name: contact.name,
                 email: contact.email,
                 phone: contact.phone,
+                image_url: contact.image_url,
                 type: contact.type.toLowerCase() as 'customer' | 'vendor',
                 // Map separate address fields
                 street: contact.street,
@@ -69,8 +71,11 @@ export const useCreateContact = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: any) => {
-            // Combine address fields if needed or send as is
-            const payload = { ...data, address: data.street ? `${data.street} ${data.city || ''}` : data.address };
+            let payload = data;
+            // Handle regular object for backward compatibility or cases without images
+            if (!(data instanceof FormData)) {
+                payload = { ...data, address: data.street ? `${data.street} ${data.city || ''}` : data.address };
+            }
             const { data: result } = await api.post('/contacts', payload);
             return result;
         },
@@ -169,6 +174,7 @@ export const useCreateProduct = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['product-categories'] });
         }
     });
 };
@@ -188,6 +194,7 @@ export const useUpdateProduct = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['product-categories'] });
         }
     });
 };
@@ -200,6 +207,17 @@ export const useArchiveProduct = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['product-categories'] });
+        }
+    });
+};
+
+export const useProductCategories = () => {
+    return useQuery<string[]>({
+        queryKey: ['product-categories'],
+        queryFn: async () => {
+            const { data } = await api.get('/products/categories');
+            return data.data || [];
         }
     });
 };

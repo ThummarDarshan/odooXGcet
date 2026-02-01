@@ -27,4 +27,6 @@ router.post(
     authController.changePassword
 );
 
+router.get('/me', authMiddleware, authController.getMe);
+
 module.exports = router;

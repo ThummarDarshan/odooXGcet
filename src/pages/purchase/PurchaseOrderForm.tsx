@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
 import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const lineSchema = z.object({
   productId: z.string().min(1),
@@ -86,12 +87,12 @@ export default function PurchaseOrderForm() {
       setValue('orderDate', order.orderDate ? new Date(order.orderDate).toISOString().slice(0, 10) : '');
       setValue('status', order.status as OrderStatus);
 
-      setLines(order.lineItems.map((li: any) => ({
+      setLines(order.lineItems?.map((li: any) => ({
         productId: li.productId,
         quantity: li.quantity,
         unitPrice: li.unitPrice,
         costCenterId: li.costCenterId
-      })));
+      })) || []);
     }
   }, [order, setValue]);
 
@@ -231,7 +232,40 @@ export default function PurchaseOrderForm() {
   };
 
   if (isEdit && isLoadingOrder) {
-    return <div className="p-8 text-center text-muted-foreground">Loading order...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[250px]" />
+            <Skeleton className="h-4 w-[150px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[100px]" />
+          </div>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-8">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              {Array(3).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
 

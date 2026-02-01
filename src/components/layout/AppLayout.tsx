@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useNavigate } from 'react-router-dom';
 
 export function AppLayout() {
@@ -59,6 +59,7 @@ export function AppLayout() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2 px-2">
                     <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.imageUrl} alt={user?.name} />
                       <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                         {user ? getInitials(user.name) : 'U'}
                       </AvatarFallback>

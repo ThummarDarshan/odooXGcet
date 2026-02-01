@@ -22,6 +22,8 @@ function getStatusBadge(status: string) {
   return <Badge className="bg-green-600/90 text-white">Under Budget</Badge>;
 }
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function BudgetDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -40,7 +42,44 @@ export default function BudgetDetail() {
 
   const recentTransactions = budget?.transactions || [];
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading budget...</div>;
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[300px]" />
+            <Skeleton className="h-4 w-[250px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-10" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><Skeleton className="h-6 w-32" /></CardHeader>
+            <CardContent>
+              <Skeleton className="h-32 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+        <Card>
+          <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
+          <CardContent>
+            <Skeleton className="h-48 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!budget) {
     return (

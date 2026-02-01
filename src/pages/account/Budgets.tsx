@@ -10,6 +10,8 @@ import { Progress } from '@/components/ui/progress';
 import { useBudgets } from '@/hooks/useData';
 import { cn } from '@/lib/utils';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function Budgets() {
   const navigate = useNavigate();
   const { data: budgets = [], isLoading, refetch, isRefetching } = useBudgets();
@@ -24,6 +26,49 @@ export default function Budgets() {
   // Simple aggregation for metrics
   const totalPlanned = filtered.reduce((sum, b) => sum + b.plannedAmount, 0);
   const totalActual = filtered.reduce((sum, b) => sum + b.actualAmount, 0);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[200px]" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-[100px]" />
+            <Skeleton className="h-10 w-[120px]" />
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array(3).fill(0).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-[100px]" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-[150px]" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-10 w-72" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(5).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -97,9 +142,7 @@ export default function Budgets() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8">Loading...</TableCell></TableRow>
-              ) : filtered.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No budgets found.</TableCell></TableRow>
               ) : (
                 filtered.map(b => (
@@ -129,7 +172,7 @@ export default function Budgets() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={b.stage === 'confirmed' || b.stage === 'active' ? 'default' : 'secondary'}>
+                      <Badge variant={b.stage === 'confirmed' ? 'default' : 'secondary'}>
                         {b.stage}
                       </Badge>
                     </TableCell>

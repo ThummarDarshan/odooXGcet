@@ -6,12 +6,43 @@ import { Loader2 } from 'lucide-react';
 
 const modeMap = Object.fromEntries(PAYMENT_MODES.map(m => [m.value, m.label]));
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function CustomerPayments() {
   const { data: payments = [], isLoading } = usePayments({ type: 'INCOMING' });
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-[250px]" />
+          <Skeleton className="h-4 w-[300px]" />
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-[150px]" />
+              <Skeleton className="h-4 w-[250px]" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(5).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-bold">Payment History</h1><p className="text-muted-foreground">All payments you have made</p></div>
+      <div>
+        <h1 className="text-2xl font-bold">Payment History</h1>
+        <p className="text-muted-foreground">All payments you have made</p>
+      </div>
       <Card>
         <CardHeader><CardTitle>Payments</CardTitle><CardDescription>Invoice, amount, mode, date</CardDescription></CardHeader>
         <CardContent>
@@ -26,9 +57,7 @@ export default function CustomerPayments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
-              ) : payments.length === 0 ? (
+              {payments.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No payments.</TableCell></TableRow>
               ) : (
                 payments.map(ip => (

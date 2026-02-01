@@ -11,6 +11,8 @@ import { ORDER_STATUSES } from '@/lib/constants';
 
 const statusMap = Object.fromEntries(ORDER_STATUSES.map(s => [s.value, s]));
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function SalesOrders() {
   const navigate = useNavigate();
   const { data: salesOrders, isLoading } = useSalesOrders();
@@ -26,7 +28,35 @@ export default function SalesOrders() {
   });
 
   if (isLoading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading sales orders...</div>;
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-[200px]" />
+            <Skeleton className="h-4 w-[300px]" />
+          </div>
+          <Skeleton className="h-10 w-[150px]" />
+        </div>
+        <Card>
+          <CardHeader>
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-[150px]" />
+              <div className="flex gap-4">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-[150px]" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array(5).fill(0).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

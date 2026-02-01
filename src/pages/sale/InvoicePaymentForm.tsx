@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,8 +34,10 @@ export default function InvoicePaymentForm() {
   const { data: allInvoices = [], isLoading } = useCustomerInvoices();
   const { mutate: createPayment, isPending } = useCreatePayment();
 
-  // Filter for unpaid or partially paid
-  const invoices = allInvoices.filter((inv: any) => (inv.paymentStatus !== 'PAID' && inv.paymentStatus !== 'paid') && (inv.status !== 'CANCELLED' && inv.status !== 'cancelled'));
+  // Filter for unpaid or partially paid - Memoized to prevent infinite loops in useEffect
+  const invoices = useMemo(() =>
+    allInvoices.filter((inv: any) => (inv.paymentStatus !== 'PAID' && inv.paymentStatus !== 'paid') && (inv.status !== 'CANCELLED' && inv.status !== 'cancelled')),
+    [allInvoices]);
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -55,7 +57,7 @@ export default function InvoicePaymentForm() {
     if (preselectedInvoiceId && invoices.length > 0) {
       const inv = invoices.find((i: any) => i.id === preselectedInvoiceId);
       if (inv) {
-        setValue('invoiceId', preselectedInvoiceId);
+        // setValue('invoiceId', preselectedInvoiceId); // Handled by defaultValues
         setValue('amount', inv.total - inv.paidAmount);
       }
     }

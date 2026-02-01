@@ -220,7 +220,7 @@ export default function Contacts() {
                     </TableCell>
                     <TableCell>
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={c.image} alt={c.name} />
+                        <AvatarImage src={c.image_url || c.image} alt={c.name} />
                         <AvatarFallback>{c.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                     </TableCell>
@@ -232,7 +232,7 @@ export default function Contacts() {
                     <TableCell>{c.email}</TableCell>
                     <TableCell>{c.phone}</TableCell>
                     <TableCell>
-                      <Badge variant={c.status === 'confirmed' ? 'default' : c.status === 'draft' ? 'secondary' : 'outline'}>
+                      <Badge variant={c.status === 'confirmed' ? 'success' : c.status === 'draft' ? 'secondary' : 'outline'} className="capitalize">
                         {c.status}
                       </Badge>
                     </TableCell>
