@@ -17,6 +17,7 @@ import { DEFAULT_TAX_RATE } from '@/lib/constants';
 import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 const schema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
@@ -33,9 +34,10 @@ export default function CustomerInvoiceForm() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const isEdit = Boolean(id);
 
-  const { data: invoice, isLoading: isLoadingInvoice } = useCustomerInvoice(id);
+  const { data: invoice, isLoading: isLoadingInvoice, isError: isInvoiceError } = useCustomerInvoice(id);
   const { data: customers = [] } = useContacts('customer');
   const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
   const { data: costCenters = [] } = useCostCenters();
@@ -101,6 +103,12 @@ export default function CustomerInvoiceForm() {
   }, [selectedSalesOrderId, salesOrders, setValue, isEdit]);
 
   useEffect(() => { setValue('lineItems', lines); }, [lines, setValue]);
+
+  useEffect(() => {
+    if (isEdit && (isInvoiceError || (!invoice && !isLoadingInvoice))) {
+      queryClient.invalidateQueries({ queryKey: ['customer-invoices'] });
+    }
+  }, [isEdit, isInvoiceError, invoice, isLoadingInvoice, queryClient]);
 
   const addLine = () => setLines(prev => [...prev, { productId: '', quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
@@ -177,7 +185,17 @@ export default function CustomerInvoiceForm() {
 
   if (isEdit && isLoadingInvoice) return <div className="p-8 text-center text-muted-foreground">Loading invoice...</div>;
 
-  if (isEdit && !invoice && !isLoadingInvoice) return <div className="text-center py-12"><p className="text-muted-foreground">Invoice not found.</p><Button asChild variant="link" onClick={() => navigate('/sale/invoices')}>Back</Button></div>;
+
+
+  if (isEdit && (isInvoiceError || (!invoice && !isLoadingInvoice))) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-lg font-semibold text-destructive mb-2">Invoice Not Found</h3>
+        <p className="text-muted-foreground mb-4">The requested invoice could not be found.</p>
+        <Button onClick={() => navigate('/sale/invoices')}>Back to Invoices</Button>
+      </div>
+    );
+  }
 
   const isReadOnly = status === 'posted' || status === 'cancelled' || user?.role === 'customer';
   const isCustomer = user?.role === 'customer';
@@ -199,8 +217,8 @@ export default function CustomerInvoiceForm() {
                 <Button onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
               </>
             )}
-            {isEdit && status === 'posted' && (invoice?.paymentStatus !== 'paid') && (
-              <Button onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Pay Now</Button>
+            {isEdit && status !== 'cancelled' && invoice?.paymentStatus !== 'paid' && invoice?.paymentStatus !== 'PAID' && (
+              <Button onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Register Payment</Button>
             )}
           </>
         )
@@ -291,7 +309,7 @@ export default function CustomerInvoiceForm() {
                 </div>
                 <div className="h-px bg-border my-1" />
                 <div className="flex justify-between text-sm">
-                  <span className="font-bold">Total:</span>
+                  <span className="font-bold">Total (Incl. GST):</span>
                   <span className="font-bold text-lg font-mono">
                     ₹{(lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0) * (1 + DEFAULT_TAX_RATE)).toLocaleString('en-IN')}
                   </span>

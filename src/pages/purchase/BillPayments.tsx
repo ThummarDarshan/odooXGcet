@@ -58,9 +58,7 @@ export default function BillPayments() {
                 filtered.map((bp: any) => (
                   <TableRow key={bp.id}>
                     <TableCell className="font-medium text-muted-foreground">
-                      {/* We don't have bill number easily here unless we fetch or store it */}
-                      {/* Displaying '-' for now or allocation count */}
-                      -
+                      {bp.billNumber || '-'}
                     </TableCell>
                     <TableCell>Rs.{bp.amount.toLocaleString()}</TableCell>
                     <TableCell>{modeMap[bp.paymentMode] ?? bp.paymentMode}</TableCell>

@@ -16,7 +16,7 @@ class SalesOrderService {
 
             const items = data.items.map(item => {
                 const itemTotal = Number(item.quantity) * Number(item.unit_price);
-                const itemTax = itemTotal * (Number(item.tax_rate || 0) / 100);
+                const itemTax = itemTotal * (Number(item.tax_rate || 18) / 100);
 
                 subtotal += itemTotal;
                 tax_amount += itemTax;
@@ -149,7 +149,7 @@ class SalesOrderService {
 
                 const newItems = data.items.map(item => {
                     const itemTotal = Number(item.quantity) * Number(item.unit_price);
-                    const itemTax = itemTotal * (Number(item.tax_rate || 0) / 100);
+                    const itemTax = itemTotal * (Number(item.tax_rate || 18) / 100);
 
                     subtotal += itemTotal;
                     tax_amount += itemTax;

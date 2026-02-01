@@ -24,7 +24,7 @@ export default function CustomerInvoices() {
                 <TableHead>Invoice #</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Due Date</TableHead>
-                <TableHead>Total (Rs.)</TableHead>
+                <TableHead>Total (Incl. GST)</TableHead>
                 <TableHead>Paid (Rs.)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>

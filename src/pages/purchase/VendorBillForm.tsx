@@ -14,6 +14,7 @@ import {
   useVendorBill, useCreateVendorBill, useUpdateVendorBill,
   useContacts, useProducts, useCostCenters, usePurchaseOrders, usePurchaseOrder, useBudgets
 } from '@/hooks/useData';
+import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_TAX_RATE } from '@/lib/constants';
 import type { OrderStatus } from '@/types';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
@@ -35,13 +36,14 @@ export default function VendorBillForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const isEdit = Boolean(id);
 
-  const { data: bill, isLoading: isLoadingBill } = useVendorBill(id);
+  const { data: bill, isLoading: isLoadingBill, isError: isBillError } = useVendorBill(id);
   const { data: vendors = [] } = useContacts('vendor');
   const { data: products = [] } = useProducts({ limit: 100, status: 'active' });
   const { data: costCenters = [] } = useCostCenters();
-  const { data: purchaseOrders = [] } = usePurchaseOrders();
+  const { data: purchaseOrders = [] } = usePurchaseOrders({ limit: 100 });
   const { data: budgets = [] } = useBudgets();
 
   const { mutate: createBill, isPending: isCreating } = useCreateVendorBill();
@@ -105,7 +107,7 @@ export default function VendorBillForm() {
         setValue('vendorId', po.vendorId);
         const poLines = po.lineItems.map((li: any) => ({
           productId: li.productId,
-          quantity: Math.floor(li.quantity), // items might be float in backend but form uses int for qty usually? Schema says int.
+          quantity: li.quantity, // allow float/decimal from PO
           unitPrice: li.unitPrice,
           costCenterId: li.costCenterId,
         }));
@@ -113,6 +115,12 @@ export default function VendorBillForm() {
       }
     }
   }, [purchaseOrderId, purchaseOrders, setValue, isEdit]);
+
+  useEffect(() => {
+    if (isEdit && (isBillError || (!bill && !isLoadingBill))) {
+      queryClient.invalidateQueries({ queryKey: ['vendor-bills'] });
+    }
+  }, [isEdit, isBillError, bill, isLoadingBill, queryClient]);
 
   const addLine = () => setLines(prev => [...prev, { productId: '', quantity: 1, unitPrice: 0 }]);
   const removeLine = (idx: number) => setLines(prev => prev.filter((_, i) => i !== idx));
@@ -204,7 +212,17 @@ export default function VendorBillForm() {
 
   if (isEdit && isLoadingBill) return <div className="p-8 text-center text-muted-foreground">Loading bill...</div>;
 
-  if (isEdit && !bill && !isLoadingBill) return <div className="text-center py-12"><p className="text-muted-foreground">Bill not found.</p><Button asChild variant="link" onClick={() => navigate('/purchase/bills')}>Back</Button></div>;
+
+
+  if (isEdit && (isBillError || (!bill && !isLoadingBill))) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-lg font-semibold text-destructive mb-2">Vendor Bill Not Found</h3>
+        <p className="text-muted-foreground mb-4">The requested vendor bill could not be found. It may have been deleted.</p>
+        <Button onClick={() => navigate('/purchase/bills')}>Back to Bills</Button>
+      </div>
+    );
+  }
 
   const isReadOnly = status === 'posted' || status === 'cancelled';
   const paymentStatus = bill?.paymentStatus ?? 'not_paid';
@@ -225,8 +243,8 @@ export default function VendorBillForm() {
               <Button variant="default" onClick={handleConfirm} className="bg-teal-700 hover:bg-teal-800">Confirm</Button>
             </>
           )}
-          {status === 'posted' && paymentStatus !== 'paid' && (
-            <Button variant="default" onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Pay Now</Button>
+          {status !== 'cancelled' && paymentStatus !== 'PAID' && paymentStatus !== 'paid' && (
+            <Button variant="default" onClick={handleRegisterPayment} className="bg-teal-700 hover:bg-teal-800">Register Payment</Button>
           )}
         </>
       }
@@ -329,7 +347,7 @@ export default function VendorBillForm() {
                 </div>
                 <div className="h-px bg-border my-1" />
                 <div className="flex justify-between text-sm">
-                  <span className="font-bold">Total:</span>
+                  <span className="font-bold">Total (Incl. GST):</span>
                   <span className="font-bold text-lg font-mono">
                     ₹{(lines.reduce((s, l) => s + (l.quantity * l.unitPrice), 0) * (1 + DEFAULT_TAX_RATE)).toLocaleString('en-IN')}
                   </span>

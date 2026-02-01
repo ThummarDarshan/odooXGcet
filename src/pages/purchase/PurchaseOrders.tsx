@@ -65,7 +65,7 @@ export default function PurchaseOrders() {
                 <TableHead>Order #</TableHead>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Total (Rs.)</TableHead>
+                <TableHead>Total (Incl. GST)</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>

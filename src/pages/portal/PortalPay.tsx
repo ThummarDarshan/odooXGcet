@@ -6,10 +6,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useCustomerInvoice, useCreatePayment } from '@/hooks/useData';
+import { useCustomerInvoice, useCreatePaymentOrder, useVerifyPayment } from '@/hooks/useData';
 import { useToast } from '@/hooks/use-toast';
 
 type Step = 'choose' | 'checkout' | 'success';
+
+// Add Razorpay type for TS
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function PortalPay() {
   const [searchParams] = useSearchParams();
@@ -21,7 +28,20 @@ export default function PortalPay() {
   const [partialAmount, setPartialAmount] = useState('');
 
   const { data: invoice, isLoading } = useCustomerInvoice(invoiceId ?? undefined);
-  const { mutate: createPayment, isPending: isProcessing } = useCreatePayment();
+  const { mutateAsync: createOrder, isPending: isCreatingOrder } = useCreatePaymentOrder();
+  const { mutateAsync: verifyPayment, isPending: isVerifying } = useVerifyPayment();
+
+  const isProcessing = isCreatingOrder || isVerifying;
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
 
   const amountDue = invoice ? invoice.total - invoice.paidAmount : 0;
   const payAmount = payType === 'full' ? amountDue : Math.min(Number(partialAmount) || 0, amountDue);
@@ -57,27 +77,85 @@ export default function PortalPay() {
     setStep('checkout');
   };
 
-  const handlePayNow = () => {
-    // Currently using manual payment creation as a simulation of Razorpay success
-    createPayment({
-      date: new Date().toISOString().slice(0, 10),
-      type: 'INCOMING',
-      mode: 'ONLINE',
-      amount: payAmount,
-      contactId: invoice.customerId,
-      reference: 'PORTAL-' + Date.now(),
-      notes: `Online payment for Invoice ${invoice.invoiceNumber}`,
-      billId: invoice.id,
-      isBill: false // It's a Customer Invoice
-    }, {
-      onSuccess: () => {
-        setStep('success');
-        toast({ title: 'Payment successful', description: 'Thanks for your payment.' });
-      },
-      onError: () => {
-        toast({ title: 'Payment failed', description: 'Could not process payment.', variant: 'destructive' });
-      }
-    });
+  const handlePayNow = async () => {
+    const res = await loadRazorpayScript();
+
+    if (!res) {
+      toast({
+        title: 'Razorpay SDK failed to load',
+        description: 'Are you online?',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // 1. Create Order on Backend
+      const orderData = await createOrder({
+        invoice_id: invoiceId as string,
+        amount: payAmount
+      });
+
+      // 2. Initialize Razorpay Checkout
+      const options = {
+        key: orderData.key_id,
+        amount: orderData.amount * 100, // already multiplied by 100 in backend? No, backend service says Math.round(amount * 100)
+        // Wait, let's check backend service again.
+        // backend/src/services/payments.service.js:212: const amountInPaise = Math.round(amount * 100);
+        // And it returns order.amount which is in paise.
+        // Actually, Razorpay Order object returned by SDK has amount in paise.
+        // orderData.amount is the 'amount' field from useCreatePaymentOrder's response.
+        // backend/src/services/payments.service.js:217: amount: amount, (this is the original amount in Rs/INR)
+        // So we need to multiply by 100 or use orderData.amount * 100?
+        // Let's check: 
+        // return {
+        //     order_id: order.id,
+        //     amount: amount, // <--- This matches what the controller sends.
+        //     currency: order.currency,
+        currency: orderData.currency,
+        name: 'Shiv Furniture',
+        description: `Payment for Invoice ${invoice.invoiceNumber}`,
+        order_id: orderData.order_id,
+        handler: async (response: any) => {
+          try {
+            // 3. Verify Payment on Backend
+            await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              invoice_id: invoice.id,
+              amount: payAmount,
+            });
+
+            setStep('success');
+            toast({ title: 'Payment successful', description: 'Thanks for your payment.' });
+          } catch (err: any) {
+            toast({
+              title: 'Verification failed',
+              description: err.response?.data?.message || 'Could not verify payment.',
+              variant: 'destructive',
+            });
+          }
+        },
+        prefill: {
+          name: orderData.customer_name,
+          email: orderData.customer_email,
+          contact: orderData.customer_phone,
+        },
+        theme: {
+          color: '#0f172a',
+        },
+      };
+
+      const rzp1 = new window.Razorpay(options);
+      rzp1.open();
+    } catch (err: any) {
+      toast({
+        title: 'Order creation failed',
+        description: err.response?.data?.message || 'Could not initialize payment.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (step === 'choose') {

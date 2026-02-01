@@ -53,7 +53,7 @@ export default function CustomerInvoices() {
                 <TableHead>Invoice #</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Invoice Date</TableHead>
-                <TableHead>Total</TableHead>
+                <TableHead>Total (Incl. GST)</TableHead>
                 <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>

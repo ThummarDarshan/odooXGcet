@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const budgetService = require('./budgets.service');
 const razorpayService = require('./razorpay.service');
 
 class PaymentService {
@@ -43,25 +44,28 @@ class PaymentService {
             prisma.payment.count({ where })
         ]);
 
+        // Fetch Bill/Invoice Numbers manually
+        const billIds = [...new Set(payments.flatMap(p => p.allocations || []).filter(a => a.invoice_type === 'VENDOR_BILL').map(a => a.invoice_id))];
+        const invIds = [...new Set(payments.flatMap(p => p.allocations || []).filter(a => a.invoice_type === 'CUSTOMER_INVOICE').map(a => a.invoice_id))];
+
+        const bills = billIds.length > 0 ? await prisma.vendorBill.findMany({
+            where: { id: { in: billIds } },
+            select: { id: true, bill_number: true }
+        }) : [];
+
+        const invoices = invIds.length > 0 ? await prisma.customerInvoice.findMany({
+            where: { id: { in: invIds } },
+            select: { id: true, invoice_number: true }
+        }) : [];
+
+        const billMap = bills.reduce((acc, b) => ({ ...acc, [b.id]: b.bill_number }), {});
+        const invMap = invoices.reduce((acc, i) => ({ ...acc, [i.id]: i.invoice_number }), {});
+
         return {
             data: payments.map(p => {
-                // Find bill number from allocations if exists
-                const billNumbers = p.allocations
-                    .filter(a => a.invoice_type === 'VENDOR_BILL')
-                    .map(a => a.invoice_id) // We need invoice_number, but allocation only has ID?
-                // We need to Include invoice in allocations to get number.
-                // Or we just return allocation info.
-                // For now, let's include allocations.invoice (polymorphic relation logic in Prisma is tricky).
-                // Actually, schema probably has direct relation or we need to fetch it?
-                // Schema: PaymentAllocation has invoice_id (String). No direct relation to VendorBill in schema defined polymorphicly usually.
-                // We might need to fetch manually or check schema.
-                // Let's assume for now we can't get bill number easily without extra fetch.
-                // But wait, getPayments includes allocations. 
-                // Let's just return what we have and maybe ID is enough or we fetch?
-                // Frontend expects billNumber. 
-                // Let's update the include to try to fetch bill if possible? 
-                // Prisma doesn't support polymorphic include easily unless defined.
-                // Let's just map the basic fields first.
+                const billId = p.allocations.find(a => a.invoice_type === 'VENDOR_BILL')?.invoice_id;
+                const invId = p.allocations.find(a => a.invoice_type === 'CUSTOMER_INVOICE')?.invoice_id;
+
                 return {
                     id: p.id,
                     amount: Number(p.amount),
@@ -71,7 +75,9 @@ class PaymentService {
                     paymentType: p.payment_type,
                     status: p.status,
                     contactName: p.contact?.name,
-                    allocations: p.allocations
+                    allocations: p.allocations,
+                    billNumber: billId ? billMap[billId] : null,
+                    invoiceNumber: invId ? invMap[invId] : null
                 };
             }),
             pagination: {
@@ -92,7 +98,23 @@ class PaymentService {
             }
         });
         if (!payment) throw new Error('Payment not found');
-        return payment;
+
+        const billId = payment.allocations.find(a => a.invoice_type === 'VENDOR_BILL')?.invoice_id;
+        const invId = payment.allocations.find(a => a.invoice_type === 'CUSTOMER_INVOICE')?.invoice_id;
+
+        let billNumber = null;
+        let invoiceNumber = null;
+
+        if (billId) {
+            const bill = await prisma.vendorBill.findUnique({ where: { id: billId }, select: { bill_number: true } });
+            billNumber = bill?.bill_number;
+        }
+        if (invId) {
+            const inv = await prisma.customerInvoice.findUnique({ where: { id: invId }, select: { invoice_number: true } });
+            invoiceNumber = inv?.invoice_number;
+        }
+
+        return { ...payment, billNumber, invoiceNumber };
     }
 
     // Manual Payment (Cash, Bank Transfer, etc.) for Invoices or Bills
@@ -109,7 +131,7 @@ class PaymentService {
             invoiceType // CUSTOMER_INVOICE or VENDOR_BILL
         } = data;
 
-        return await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             // Generate Payment Number
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const count = await tx.payment.count({
@@ -140,8 +162,17 @@ class PaymentService {
 
             // TODO: Journal Entry Logic here if needed
 
+
             return payment;
         });
+
+        // Trigger Budget Recalculation for target Invoice/Bill
+        // Should we assume the payment was successful? Yes it says SUCCESS.
+        if (invoiceId && invoiceType) {
+            await this._triggerBudgetRecalc(invoiceId, invoiceType);
+        }
+
+        return result;
     }
 
     // Helper to allocate payment and update document status
@@ -229,7 +260,7 @@ class PaymentService {
         const isValid = razorpayService.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
         if (!isValid) throw new Error('Invalid payment signature');
 
-        return await prisma.$transaction(async (tx) => {
+        const payment = await prisma.$transaction(async (tx) => {
             const invoice = await tx.customerInvoice.findUnique({ where: { id: invoice_id } });
             if (!invoice) throw new Error('Invoice not found');
 
@@ -238,7 +269,7 @@ class PaymentService {
             const count = await tx.payment.count({ where: { payment_number: { startsWith: `PAY-${dateStr}` } } });
             const paymentNumber = `PAY-${dateStr}-${(count + 1).toString().padStart(4, '0')}`;
 
-            const payment = await tx.payment.create({
+            const newPayment = await tx.payment.create({
                 data: {
                     payment_number: paymentNumber,
                     payment_date: new Date(),
@@ -253,10 +284,45 @@ class PaymentService {
                 }
             });
 
-            await this._allocatePaymentToDocument(tx, payment.id, invoice_id, 'CUSTOMER_INVOICE', parseFloat(amount), userId);
+            await this._allocatePaymentToDocument(tx, newPayment.id, invoice_id, 'CUSTOMER_INVOICE', parseFloat(amount), userId);
 
-            return payment;
+            return newPayment;
         });
+
+        // Trigger Budget Recalculation
+        await this._triggerBudgetRecalc(invoice_id, 'CUSTOMER_INVOICE');
+
+        return payment;
+    }
+
+    async _triggerBudgetRecalc(docId, docType) {
+        try {
+            if (docType === 'VENDOR_BILL') {
+                const doc = await prisma.vendorBill.findUnique({
+                    where: { id: docId },
+                    include: { items: true }
+                });
+                if (doc && doc.items) {
+                    const uniqueCostCenters = [...new Set(doc.items.map(i => i.analytical_account_id).filter(Boolean))];
+                    for (const ccId of uniqueCostCenters) {
+                        await budgetService.recalculateRelevantBudgets(ccId, doc.bill_date);
+                    }
+                }
+            } else if (docType === 'CUSTOMER_INVOICE') {
+                const doc = await prisma.customerInvoice.findUnique({
+                    where: { id: docId },
+                    include: { items: true }
+                });
+                if (doc && doc.items) {
+                    const uniqueCostCenters = [...new Set(doc.items.map(i => i.analytical_account_id).filter(Boolean))];
+                    for (const ccId of uniqueCostCenters) {
+                        await budgetService.recalculateRelevantBudgets(ccId, doc.invoice_date);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error triggering budget recalc:', error);
+        }
     }
 }
 

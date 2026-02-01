@@ -35,7 +35,7 @@ export default function InvoicePaymentForm() {
   const { mutate: createPayment, isPending } = useCreatePayment();
 
   // Filter for unpaid or partially paid
-  const invoices = allInvoices.filter((inv: any) => inv.paymentStatus !== 'PAID' && inv.status !== 'CANCELLED' && inv.status !== 'DRAFT');
+  const invoices = allInvoices.filter((inv: any) => (inv.paymentStatus !== 'PAID' && inv.paymentStatus !== 'paid') && (inv.status !== 'CANCELLED' && inv.status !== 'cancelled'));
 
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),

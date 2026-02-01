@@ -90,6 +90,7 @@ export interface Budget {
   periodEnd: string;
   plannedAmount: number;
   actualAmount: number;
+  reservedAmount?: number;
   remainingBalance: number;
   achievementPercentage: number;
   // Lifecycle

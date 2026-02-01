@@ -1,4 +1,5 @@
 const prisma = require('../config/database');
+const budgetService = require('./budgets.service');
 
 class VendorBillService {
     async createVendorBill(data, userId) {
@@ -19,7 +20,7 @@ class VendorBillService {
         const itemsToCreate = data.items.map(item => {
             const qty = Number(item.quantity) || 0;
             const price = Number(item.unitPrice) || 0;
-            const itemTaxRate = Number(item.taxRate) || 0;
+            const itemTaxRate = Number(item.taxRate) || 18;
             const itemSubtotal = qty * price;
             const itemTax = itemSubtotal * (itemTaxRate / 100);
 
@@ -66,6 +67,20 @@ class VendorBillService {
             }
         });
 
+        // Trigger Budget Recalculation
+        // We do this asynchronously so we don't block the response, or await if strict consistency is needed.
+        // Given the user wants it "updated", await is safer.
+        if (data.items && data.items.length > 0) {
+            const uniqueCostCenters = [...new Set(data.items.map(i => i.costCenterId).filter(Boolean))];
+
+            // We use the bill date for budget period matching
+            const date = new Date(data.billDate);
+
+            for (const ccId of uniqueCostCenters) {
+                await budgetService.recalculateRelevantBudgets(ccId, date);
+            }
+        }
+
         return bill;
     }
 
@@ -99,27 +114,7 @@ class VendorBillService {
         ]);
 
         return {
-            data: bills.map(vb => ({
-                id: vb.id,
-                billNumber: vb.bill_number,
-                vendorId: vb.vendor_id,
-                vendorName: vb.vendor?.name,
-                purchaseOrderId: vb.purchase_order_id,
-                purchaseOrder: vb.purchase_order ? {
-                    id: vb.purchase_order.id,
-                    orderNumber: vb.purchase_order.po_number
-                } : null,
-                billDate: vb.bill_date,
-                dueDate: vb.due_date,
-                status: vb.status,
-                paymentStatus: vb.payment_status,
-                total: Number(vb.total_amount),
-                paidAmount: Number(vb.paid_amount),
-                remainingAmount: Number(vb.remaining_amount),
-                tax: Number(vb.tax_amount),
-                subtotal: Number(vb.subtotal),
-                notes: vb.notes
-            })),
+            data: bills,
             pagination: {
                 page: Number(page),
                 limit: Number(limit),
@@ -141,43 +136,10 @@ class VendorBillService {
             }
         });
         if (!bill) throw new Error('Vendor Bill not found');
-        return {
-            id: bill.id,
-            billNumber: bill.bill_number,
-            vendorId: bill.vendor_id,
-            vendorName: bill.vendor?.name,
-            purchaseOrderId: bill.purchase_order_id,
-            purchaseOrder: bill.purchase_order ? {
-                id: bill.purchase_order.id,
-                orderNumber: bill.purchase_order.po_number
-            } : null,
-            billDate: bill.bill_date,
-            dueDate: bill.due_date,
-            status: bill.status,
-            paymentStatus: bill.payment_status,
-            total: Number(bill.total_amount),
-            paidAmount: Number(bill.paid_amount),
-            remainingAmount: Number(bill.remaining_amount),
-            tax: Number(bill.tax_amount),
-            subtotal: Number(bill.subtotal),
-            notes: bill.notes,
-            lineItems: bill.items.map(item => ({
-                id: item.id,
-                productId: item.product_id,
-                productName: item.product?.name,
-                quantity: Number(item.quantity),
-                unitPrice: Number(item.unit_price),
-                taxRate: Number(item.tax_rate),
-                taxAmount: Number(item.tax_amount),
-                total: Number(item.total_amount),
-                costCenterId: item.analytical_account_id,
-                costCenterName: item.analytical_account?.name
-            }))
-        };
+        return bill;
     }
 
     async updateVendorBill(id, data, userId) {
-        // Similar logic to PO, allow full update if Draft.
         const existingBill = await this.getVendorBillById(id);
 
         let updateData = {};
@@ -185,7 +147,9 @@ class VendorBillService {
         if (data.billDate) updateData.bill_date = new Date(data.billDate);
         if (data.dueDate) updateData.due_date = new Date(data.dueDate);
         if (data.notes !== undefined) updateData.notes = data.notes;
-        if (data.status) updateData.status = data.status;
+        if (data.status) updateData.status = data.status.toUpperCase();
+
+        let updatedBill;
 
         // If items changing
         if (data.items) {
@@ -195,7 +159,7 @@ class VendorBillService {
             const itemsToCreate = data.items.map(item => {
                 const qty = Number(item.quantity) || 0;
                 const price = Number(item.unitPrice) || 0;
-                const itemTaxRate = Number(item.taxRate) || 0;
+                const itemTaxRate = Number(item.taxRate || item.tax_rate) || 18;
                 const itemSubtotal = qty * price;
                 const itemTax = itemSubtotal * (itemTaxRate / 100);
 
@@ -220,15 +184,13 @@ class VendorBillService {
             updateData.total_amount = totalAmount;
 
             // Recalculate remaining amount if not paid
-            // Assuming we don't handle partial updates of amount if already partially paid here complexly.
-            // If status is DRAFT, we can reset paid_amount to 0 if we want, or assuming it's 0.
             if (existingBill.status === 'DRAFT') {
                 updateData.remaining_amount = totalAmount;
             }
 
-            return await prisma.$transaction(async (prisma) => {
-                await prisma.vendorBillItem.deleteMany({ where: { vendor_bill_id: id } });
-                return await prisma.vendorBill.update({
+            updatedBill = await prisma.$transaction(async (tx) => {
+                await tx.vendorBillItem.deleteMany({ where: { vendor_bill_id: id } });
+                return await tx.vendorBill.update({
                     where: { id },
                     data: {
                         ...updateData,
@@ -243,7 +205,7 @@ class VendorBillService {
                 });
             });
         } else {
-            return await prisma.vendorBill.update({
+            updatedBill = await prisma.vendorBill.update({
                 where: { id },
                 data: updateData,
                 include: {
@@ -252,6 +214,20 @@ class VendorBillService {
                 }
             });
         }
+
+        // Trigger Budget Recalculation
+        if (updatedBill && updatedBill.items) {
+            const uniqueCostCenters = [...new Set(updatedBill.items.map(i => i.analytical_account_id).filter(Boolean))];
+            const date = updatedBill.bill_date;
+
+            for (const ccId of uniqueCostCenters) {
+                // Determine effective date? 
+                // Budget uses date range. Usually bill date.
+                await budgetService.recalculateRelevantBudgets(ccId, date);
+            }
+        }
+
+        return updatedBill;
     }
 
     async deleteVendorBill(id) {

@@ -299,7 +299,7 @@ export default function SalesOrderForm() {
                 </div>
                 <div className="h-px bg-border my-1" />
                 <div className="flex justify-between text-sm">
-                  <span className="font-bold">Total:</span>
+                  <span className="font-bold">Total (Incl. GST):</span>
                   <span className="font-bold text-lg font-mono">
                     ₹{total.toLocaleString('en-IN')}
                   </span>

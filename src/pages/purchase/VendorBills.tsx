@@ -63,7 +63,7 @@ export default function VendorBills() {
                 <TableHead>Purchase Order</TableHead>
                 <TableHead>Vendor</TableHead>
                 <TableHead>Bill Date</TableHead>
-                <TableHead>Total</TableHead>
+                <TableHead>Total (Incl. GST)</TableHead>
                 <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -82,20 +82,20 @@ export default function VendorBills() {
                   >
                     <TableCell className="font-medium">{vb.billNumber}</TableCell>
                     <TableCell>
-                      {vb.purchaseOrder ? (
+                      {vb.purchaseOrderNumber ? (
                         <Link
                           to={`/purchase/orders/${vb.purchaseOrderId}`}
                           className="text-blue-600 hover:underline relative z-10"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {vb.purchaseOrder.orderNumber}
+                          {vb.purchaseOrderNumber}
                         </Link>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell>{vb.vendorName ?? vb.vendorId}</TableCell>
-                    <TableCell>{new Date(vb.billDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(vb.date).toLocaleDateString()}</TableCell>
                     <TableCell>Rs.{vb.total.toLocaleString()}</TableCell>
                     <TableCell>Rs.{vb.paidAmount.toLocaleString()}</TableCell>
                     <TableCell><Badge variant={payMap[vb.paymentStatus]?.color === 'destructive' ? 'destructive' : 'secondary'}>{vb.paymentStatus.replace('_', ' ')}</Badge></TableCell>

@@ -27,9 +27,10 @@ enum ContactStatus {
 
 enum BudgetStatus {
   DRAFT
+  CONFIRMED
   ACTIVE
-  CLOSED
   REVISED
+  ARCHIVED
 }
 
 enum JournalEntryType {
@@ -268,12 +269,7 @@ enum BudgetType {
   EXPENSE
 }
 
-enum BudgetStatus {
-  DRAFT
-  CONFIRMED
-  REVISION
-  ARCHIVED
-}
+
 
 model Budget {
   id                  String       @id @default(uuid())
@@ -284,6 +280,8 @@ model Budget {
   start_date          DateTime     @db.Date
   end_date            DateTime     @db.Date
   budgeted_amount     Decimal      @db.Decimal(15, 2)
+  actual_amount       Decimal      @default(0) @db.Decimal(15, 2)
+  reserved_amount     Decimal      @default(0) @db.Decimal(15, 2)
   description         String?
   status              BudgetStatus @default(DRAFT)
   revision_number     Int          @default(0)

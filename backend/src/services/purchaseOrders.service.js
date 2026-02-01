@@ -19,7 +19,7 @@ class PurchaseOrderService {
         const itemsToCreate = data.items.map(item => {
             const qty = Number(item.quantity) || 0;
             const price = Number(item.unitPrice) || 0;
-            const itemTaxRate = Number(item.taxRate) || 0;
+            const itemTaxRate = Number(item.taxRate || item.tax_rate) || 18;
             const itemSubtotal = qty * price;
             const itemTax = itemSubtotal * (itemTaxRate / 100);
 
@@ -100,19 +100,7 @@ class PurchaseOrderService {
         ]);
 
         return {
-            data: orders.map(po => ({
-                id: po.id,
-                orderNumber: po.po_number,
-                vendorId: po.vendor_id,
-                vendorName: po.vendor?.name,
-                orderDate: po.order_date,
-                expectedDate: po.expected_delivery_date,
-                status: po.status,
-                total: Number(po.total_amount),
-                tax: Number(po.tax_amount),
-                subtotal: Number(po.subtotal),
-                notes: po.notes
-            })),
+            data: orders,
             pagination: {
                 page: Number(page),
                 limit: Number(limit),
@@ -138,32 +126,7 @@ class PurchaseOrderService {
             error.statusCode = 404;
             throw error;
         }
-        return {
-            id: po.id,
-            orderNumber: po.po_number,
-            vendorId: po.vendor_id,
-            vendorName: po.vendor?.name,
-            orderDate: po.order_date,
-            expectedDate: po.expected_delivery_date,
-            status: po.status,
-            total: Number(po.total_amount),
-            tax: Number(po.tax_amount),
-            subtotal: Number(po.subtotal),
-            notes: po.notes,
-            lineItems: po.items.map(item => ({
-                id: item.id,
-                productId: item.product_id,
-                productName: item.product?.name,
-                quantity: Number(item.quantity),
-                unitPrice: Number(item.unit_price),
-                taxRate: Number(item.tax_rate),
-                taxAmount: Number(item.tax_amount),
-                total: Number(item.total_amount),
-                costCenterId: item.analytical_account_id,
-                costCenterName: item.analytical_account?.name
-            })),
-            vendorBills: po.vendor_bills // optional
-        };
+        return po;
     }
 
     async updatePurchaseOrder(id, data, userId) {
@@ -192,7 +155,7 @@ class PurchaseOrderService {
             const itemsToCreate = data.items.map(item => {
                 const qty = Number(item.quantity) || 0;
                 const price = Number(item.unitPrice) || 0;
-                const itemTaxRate = Number(item.taxRate) || 0;
+                const itemTaxRate = Number(item.taxRate || item.tax_rate) || 18;
                 const itemSubtotal = qty * price;
                 const itemTax = itemSubtotal * (itemTaxRate / 100);
 

@@ -56,7 +56,7 @@ export default function SalesOrders() {
                 <TableHead>Order #</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Total</TableHead>
+                <TableHead>Total (Incl. GST)</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>

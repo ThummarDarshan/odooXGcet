@@ -35,7 +35,7 @@ export default function BillPaymentForm() {
   const { mutate: createPayment, isPending } = useCreatePayment();
 
   // Only show bills that are not fully paid
-  const bills = allBills.filter((vb: any) => vb.paymentStatus !== 'paid' && vb.status !== 'cancelled' && vb.status !== 'draft');
+  const bills = allBills.filter((vb: any) => (vb.paymentStatus !== 'paid' && vb.paymentStatus !== 'PAID') && (vb.status !== 'cancelled' && vb.status !== 'CANCELLED'));
 
   const selectedBill = preselectedBillId ? bills.find((b: any) => b.id === preselectedBillId) : null;
 

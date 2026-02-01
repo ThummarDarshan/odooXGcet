@@ -1,5 +1,6 @@
 const analyticalService = require('./analytical.service');
 const prisma = require('../config/database');
+const budgetService = require('./budgets.service');
 
 class CustomerInvoiceService {
     async create(data, userId) {
@@ -32,7 +33,7 @@ class CustomerInvoiceService {
                 const product = productMap.get(productId);
                 const qty = Number(item.quantity) || 0;
                 const price = Number(item.unit_price || item.unitPrice) || 0;
-                const taxRate = Number(item.tax_rate || item.taxRate || 0);
+                const taxRate = Number(item.tax_rate || item.taxRate || 18);
 
                 const itemTotal = qty * price;
                 const itemTax = itemTotal * (taxRate / 100);
@@ -96,8 +97,20 @@ class CustomerInvoiceService {
                 }
             });
 
-            return invoice;
         });
+
+        // Trigger Budget Recalculation
+        // Note: transaction result 'invoice' has items included from line 91
+        if (invoice && invoice.items) {
+            const uniqueCostCenters = [...new Set(invoice.items.map(i => i.analytical_account_id).filter(Boolean))];
+            const date = invoice.invoice_date;
+
+            for (const ccId of uniqueCostCenters) {
+                await budgetService.recalculateRelevantBudgets(ccId, date);
+            }
+        }
+
+        return invoice;
     }
 
     async getAll(filters = {}, user = null) {
@@ -179,7 +192,7 @@ class CustomerInvoiceService {
     }
 
     async update(id, data) {
-        return await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             const existing = await tx.customerInvoice.findUnique({
                 where: { id }
             });
@@ -208,7 +221,7 @@ class CustomerInvoiceService {
                     const product = productMap.get(productId);
                     const qty = Number(item.quantity) || 0;
                     const price = Number(item.unit_price || item.unitPrice) || 0;
-                    const taxRate = Number(item.tax_rate || item.taxRate || 0);
+                    const taxRate = Number(item.tax_rate || item.taxRate || 18);
 
                     const itemTotal = qty * price;
                     const itemTax = itemTotal * (taxRate / 100);
@@ -265,12 +278,26 @@ class CustomerInvoiceService {
             if (headerDataRaw.total_amount !== undefined) headerData.total_amount = headerDataRaw.total_amount;
             if (headerDataRaw.remaining_amount !== undefined) headerData.remaining_amount = headerDataRaw.remaining_amount;
 
-            return await tx.customerInvoice.update({
+            const updatedInvoice = await tx.customerInvoice.update({
                 where: { id },
                 data: headerData,
                 include: { customer: true, items: true }
             });
+
+            return updatedInvoice;
         });
+
+        // Trigger Budget Recalculation
+        if (result && result.items) {
+            const uniqueCostCenters = [...new Set(result.items.map(i => i.analytical_account_id).filter(Boolean))];
+            const date = result.invoice_date;
+
+            for (const ccId of uniqueCostCenters) {
+                await budgetService.recalculateRelevantBudgets(ccId, date);
+            }
+        }
+
+        return result;
     }
 
     async delete(id) {

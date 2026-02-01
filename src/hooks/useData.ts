@@ -216,19 +216,20 @@ export const useBudgets = () => {
                 id: b.id,
                 name: b.name,
                 costCenterId: b.analytical_account_id,
-                costCenterName: b.analytical_account?.name,
+                costCenterName: b.costCenterName || b.analytical_account?.name,
                 type: b.type,
                 periodStart: b.start_date,
                 periodEnd: b.end_date,
-                plannedAmount: Number(b.budgeted_amount),
-                actualAmount: Number(b.actual_amount),
-                remainingBalance: Number(b.remaining_balance),
-                achievementPercentage: Number(b.achievement_percentage),
-                status: b.computed_status,
-                stage: b.status === 'ACTIVE' ? 'confirmed' : b.status.toLowerCase(),
+                plannedAmount: Number(b.plannedAmount || b.budgeted_amount),
+                actualAmount: Number(b.actualAmount || 0),
+                reservedAmount: Number(b.reservedAmount || 0),
+                remainingBalance: Number(b.remainingBalance || 0),
+                achievementPercentage: Number(b.achievementPercentage || 0),
+                status: b.status,
+                stage: (b.stage === 'active' || b.stage === 'confirmed') ? 'confirmed' : (b.stage || 'draft'),
                 version: b.revision_number || 1,
                 revisionOfId: b.parent_budget_id,
-                nextVersionId: b.child_budgets?.[0]?.id, // Assuming simple linkage
+                nextVersionId: b.child_budgets?.[0]?.id,
                 createdAt: b.created_at,
                 updatedAt: b.updated_at
             }));
@@ -246,20 +247,21 @@ export const useBudget = (id: string | undefined) => {
                 id: b.id,
                 name: b.name,
                 costCenterId: b.analytical_account_id,
-                costCenterName: b.analytical_account?.name,
+                costCenterName: b.costCenterName || b.analytical_account?.name,
                 type: b.type,
                 periodStart: b.start_date,
                 periodEnd: b.end_date,
-                plannedAmount: Number(b.budgeted_amount),
-                actualAmount: Number(b.actual_amount),
-                remainingBalance: Number(b.remaining_balance),
-                achievementPercentage: Number(b.achievement_percentage),
-                status: b.computed_status,
-                stage: b.status === 'ACTIVE' ? 'confirmed' : b.status.toLowerCase(),
+                plannedAmount: Number(b.plannedAmount || b.budgeted_amount),
+                actualAmount: Number(b.actualAmount || 0),
+                reservedAmount: Number(b.reservedAmount || 0),
+                remainingBalance: Number(b.remainingBalance || 0),
+                achievementPercentage: Number(b.achievementPercentage || 0),
+                status: b.status,
+                stage: (b.stage === 'active' || b.stage === 'confirmed') ? 'confirmed' : (b.stage || 'draft'),
                 version: b.revision_number || 1,
                 revisionOfId: b.parent_budget_id,
                 nextVersionId: b.child_budgets?.[0]?.id,
-                transactions: b.transactions,
+                transactions: b.transactions || [],
                 createdAt: b.created_at,
                 updatedAt: b.updated_at
             };
@@ -537,7 +539,7 @@ export const useCreateSalesOrder = () => {
                     product_id: li.productId,
                     quantity: li.quantity,
                     unit_price: li.unitPrice,
-                    tax_rate: 0,
+                    tax_rate: 18,
                     // If cost center is selected
                     analytical_account_id: li.costCenterId
                 }))
@@ -600,7 +602,7 @@ export const useUpdateSalesOrder = () => {
                     product_id: li.productId,
                     quantity: li.quantity,
                     unit_price: li.unitPrice,
-                    tax_rate: 0 // Optional
+                    tax_rate: 18 // Default to 18%
                 }));
                 delete payload.lineItems;
             }
@@ -619,11 +621,16 @@ export const useUpdateSalesOrder = () => {
 };
 
 // ================= PURCHASE ORDERS =================
-export const usePurchaseOrders = () => {
+export const usePurchaseOrders = (filters?: { status?: string; vendorId?: string; limit?: number }) => {
     return useQuery<PurchaseOrder[]>({
-        queryKey: ['purchase-orders'],
+        queryKey: ['purchase-orders', filters],
         queryFn: async () => {
-            const { data } = await api.get('/purchase-orders');
+            const params = new URLSearchParams();
+            if (filters?.status) params.append('status', filters.status);
+            if (filters?.vendorId) params.append('vendorId', filters.vendorId);
+            if (filters?.limit) params.append('limit', filters.limit.toString());
+
+            const { data } = await api.get(`/purchase-orders?${params.toString()}`);
             const raw = data.data || data;
             return raw.map((po: any) => ({
                 id: po.id,
@@ -670,18 +677,15 @@ export const usePurchaseOrder = (id: string | undefined) => {
                 total: Number(po.total_amount),
                 createdAt: po.created_at,
                 updatedAt: po.updated_at,
-                lineItems: (po.lineItems || po.items)?.map((item: any) => ({
+                lineItems: po.items?.map((item: any) => ({
                     id: item.id,
-                    productId: item.productId || item.product_id, // Backend returns camelCase now?
-                    // My backend service mapped EVERYTHING to camelCase in getPurchaseOrderById.
-                    // So item.product_id is likely item.productId.
-                    // Let's check backend service again.
-                    productName: item.productName || item.product?.name,
+                    productId: item.product_id,
+                    productName: item.product?.name,
                     quantity: Number(item.quantity),
-                    unitPrice: Number(item.unitPrice || item.unit_price),
-                    amount: Number(item.total || item.total_amount),
-                    costCenterId: item.costCenterId || item.analytical_account_id,
-                    costCenterName: item.costCenterName || item.analytical_account?.name
+                    unitPrice: Number(item.unit_price),
+                    amount: Number(item.total_amount),
+                    costCenterId: item.analytical_account_id,
+                    costCenterName: item.analytical_account?.name
                 })) || []
             };
         },
@@ -751,6 +755,7 @@ export const useVendorBills = () => {
                 total: Number(vb.total_amount),
                 paidAmount: Number(vb.paid_amount),
                 purchaseOrderId: vb.purchase_order_id,
+                purchaseOrderNumber: vb.purchase_order?.po_number,
                 items: vb.items || []
             }));
         }
@@ -775,14 +780,15 @@ export const useVendorBill = (id: string | undefined) => {
                 total: Number(vb.total_amount),
                 paidAmount: Number(vb.paid_amount),
                 purchaseOrderId: vb.purchase_order_id,
-                items: (vb.lineItems || vb.items)?.map((i: any) => ({
+                purchaseOrderNumber: vb.purchase_order?.po_number,
+                items: vb.items?.map((i: any) => ({
                     id: i.id,
-                    productId: i.productId || i.product_id,
-                    productName: i.productName || i.product?.name,
+                    productId: i.product_id,
+                    productName: i.product?.name,
                     quantity: Number(i.quantity),
-                    unitPrice: Number(i.unitPrice || i.unit_price),
-                    amount: Number(i.total || i.total_amount),
-                    costCenterId: i.costCenterId || i.analytical_account_id
+                    unitPrice: Number(i.unit_price),
+                    amount: Number(i.total_amount),
+                    costCenterId: i.analytical_account_id
                 })) || []
             };
         },
@@ -948,8 +954,8 @@ export const usePayments = (filters?: { type?: 'INCOMING' | 'OUTGOING' }) => {
                 referenceId: p.referenceId,
                 paymentType: p.paymentType,
                 status: p.status,
-                billNumber: p.allocations?.find((a: any) => a.invoice_type === 'VENDOR_BILL')?.invoice_id,
-                invoiceNumber: p.allocations?.find((a: any) => a.invoice_type === 'CUSTOMER_INVOICE')?.invoice_id,
+                billNumber: p.billNumber,
+                invoiceNumber: p.invoiceNumber,
                 allocations: p.allocations
             }));
         }
@@ -960,23 +966,57 @@ export const useCreatePayment = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: any) => {
+            // Flexible mapping for different call signatures
+            const paymentType = (data.type === 'outbound' || data.paymentType === 'OUTGOING') ? 'OUTGOING' : 'INCOMING';
+            const invoiceId = data.billId || data.invoiceId || (data.invoices && data.invoices[0]?.id);
+            const isBill = data.isBill || (data.type === 'outbound') || (data.paymentType === 'OUTGOING');
+
             const payload = {
-                paymentDate: data.date,
-                paymentType: data.type, // 'INCOMING' or 'OUTGOING'
-                paymentMethod: data.mode,
-                amount: data.amount,
+                paymentDate: data.date || data.paymentDate,
+                paymentType: paymentType,
+                paymentMethod: data.mode || data.method || data.paymentMode,
+                amount: Number(data.amount),
                 contactId: data.contactId,
-                referenceNumber: data.reference,
+                referenceNumber: data.reference || data.referenceId,
                 notes: data.notes,
-                invoiceId: data.billId, // For Bill Payment
-                invoiceType: data.isBill ? 'VENDOR_BILL' : 'CUSTOMER_INVOICE'
+                invoiceId: invoiceId,
+                invoiceType: isBill ? 'VENDOR_BILL' : 'CUSTOMER_INVOICE'
             };
-            const { data: result } = await api.post('/payments/manual', payload);
+            const { data: result } = await api.post('/payments', payload);
             return result;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['payments'] });
             queryClient.invalidateQueries({ queryKey: ['vendor-bills'] });
+            queryClient.invalidateQueries({ queryKey: ['customer-invoices'] });
+        }
+    });
+};
+
+export const useCreatePaymentOrder = () => {
+    return useMutation({
+        mutationFn: async (data: { invoice_id: string; amount: number }) => {
+            const { data: result } = await api.post('/payments/create-order', data);
+            return result.data || result;
+        }
+    });
+};
+
+export const useVerifyPayment = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: {
+            razorpay_order_id: string;
+            razorpay_payment_id: string;
+            razorpay_signature: string;
+            invoice_id: string;
+            amount: number;
+        }) => {
+            const { data: result } = await api.post('/payments/verify', data);
+            return result;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['payments'] });
             queryClient.invalidateQueries({ queryKey: ['customer-invoices'] });
         }
     });

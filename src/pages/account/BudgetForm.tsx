@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useBudget, useCreateBudget, useUpdateBudget, useArchiveBudget, useCostCenters } from '@/hooks/useData';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Budget } from '@/types';
 
 const schema = z.object({
@@ -30,9 +31,10 @@ export default function BudgetForm() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const isEdit = Boolean(id);
 
-  const { data: remoteBudget, isLoading: isLoadingBudget } = useBudget(id);
+  const { data: remoteBudget, isLoading: isLoadingBudget, isError: isBudgetError } = useBudget(id);
   const { data: costCenters = [] } = useCostCenters();
   const { mutate: createBudget, isPending: isCreating } = useCreateBudget();
   const { mutate: updateBudget, isPending: isUpdating } = useUpdateBudget();
@@ -44,7 +46,14 @@ export default function BudgetForm() {
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', costCenterId: '', type: 'EXPENSE', periodStart: '', periodEnd: '', plannedAmount: 0 },
+    defaultValues: {
+      name: '',
+      costCenterId: '',
+      type: 'EXPENSE',
+      periodStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1, 12).toISOString().slice(0, 10), // Default to 1st of month. Noon to avoid timezone boundary issues.
+      periodEnd: '',
+      plannedAmount: 0
+    },
   });
 
   useEffect(() => {
@@ -60,6 +69,12 @@ export default function BudgetForm() {
       });
     }
   }, [remoteBudget, reset]);
+
+  useEffect(() => {
+    if (isEdit && (isBudgetError || (!budget && !remoteBudget && !isLoadingBudget))) {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+    }
+  }, [isEdit, isBudgetError, budget, remoteBudget, isLoadingBudget, queryClient]);
 
   const onSubmit = (data: FormValues) => {
     if (isEdit && id) {
@@ -135,8 +150,16 @@ export default function BudgetForm() {
     return <div className="p-8 text-center text-muted-foreground">Loading budget...</div>;
   }
 
-  if (isEdit && !budget && !isLoadingBudget) {
-    return <div className="text-center py-12 text-muted-foreground">Budget not found.</div>;
+
+
+  if (isEdit && (isBudgetError || (!budget && !remoteBudget && !isLoadingBudget))) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-lg font-semibold text-destructive mb-2">Budget Not Found</h3>
+        <p className="text-muted-foreground mb-4">The requested budget could not be found.</p>
+        <Button onClick={() => navigate('/account/budgets')}>Back to Budgets</Button>
+      </div>
+    );
   }
 
   // Only editable in 'draft' stage
